@@ -20,7 +20,7 @@ darwin = "bin/lc0"
 [network]
 # Chosen in the pilot from measured CPU nodes per second. Update the file
 # name here once chosen; the file's hash is recorded in the lock file.
-file = "networks/network.pb.gz"
+file = "networks/t3-512x15x16h-distill2-swa-03477500.pb"
 uci_option = "WeightsFile"
 
 [uci_options]
