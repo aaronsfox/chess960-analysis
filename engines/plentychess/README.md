@@ -21,29 +21,35 @@ The binary goes in `engines/plentychess/bin/` (git ignores that folder).
 [8.0.0 release page](https://github.com/Yoshie2000/PlentyChess/releases/tag/b-v8.0.0)
 (click "Show all assets") and rename it to `bin/plentychess.exe`.
 
-**Linux cluster (production data).** Download the Linux build for the compute
-nodes' CPUs. The release offers `PlentyChess-8.0.0-linux-<arch>` builds for
-`generic`, `ssse3`, `fma`, `avx2`, `bmi2`, `avx512` and `avx512vbmi2`. Then:
+**Linux cluster (production data).** Build from source. The release's Linux
+binaries need a recent system C library (glibc 2.38) and fail on clusters
+with older ones (`GLIBC_2.38 not found`). The build needs `make`, a C++17
+compiler and `curl`, which downloads the network, so run it on a login node:
 
 ```bash
-cp PlentyChess-8.0.0-linux-bmi2 <repo>/engines/plentychess/bin/plentychess
-chmod +x <repo>/engines/plentychess/bin/plentychess
-```
-
-Or build from the release tag (the Makefile downloads and embeds the network):
-
-```bash
-git clone --depth 1 --branch b-v8.0.0 https://github.com/Yoshie2000/PlentyChess.git /tmp/plenty
-cd /tmp/plenty
-make -j profile-build EXE=plentychess arch=bmi2
+module load GCC/10.2.0              # any GCC with C++17; use your cluster's module name
+git clone --depth 1 --branch b-v8.0.0 https://github.com/Yoshie2000/PlentyChess.git /tmp/plenty-build
+cd /tmp/plenty-build
+make -j4 EXE=plentychess arch=avx512 CXX=g++
 cp plentychess <repo>/engines/plentychess/bin/plentychess
 ```
 
+`CXX=g++` replaces the Makefile's default `clang++`. `arch` takes `generic`,
+`ssse3`, `fma`, `avx2`, `bmi2`, `avx512` or `avx512vbmi2`; use the same
+architecture as your Windows build. The plain build skips profile-guided
+optimisation, which only affects speed (`make profile-build ...` adds it).
+If the build stops on `numa.h` or `-lnuma`, load the cluster's `numactl`
+module. If the cluster's glibc is 2.38 or newer, the release file
+`PlentyChess-8.0.0-linux-<arch>` also works.
+
 ## Use the same build type everywhere
 
-Pick one architecture build (for example `bmi2`) that runs on both your PC and
-the cluster's compute nodes, and use it on both. Different builds use
-different vector code paths, which can change results slightly.
+Pick one architecture build (for example `avx512`) that runs on both your PC
+and the cluster's compute nodes, and use it on both. Different builds use
+different vector code paths, which can change results slightly. Your Windows
+release build and your GCC-built Linux binary also come from different
+compilers, so compare `bench` node counts on both machines: if they match,
+both search identically.
 
 ## Verify
 
