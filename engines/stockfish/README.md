@@ -6,22 +6,54 @@ Version pinned for this study: **19** (check `engine.toml`).
 
 The binary goes in `engines/stockfish/bin/` (git ignores that folder).
 
-**Windows (development).** Download the Windows x86-64 AVX2 build from the
-[Stockfish download page](https://stockfishchess.org/download/) or the
-[GitHub releases](https://github.com/official-stockfish/Stockfish/releases),
-unzip it and rename the executable to `bin/stockfish.exe`.
+Stockfish 19 publishes one **universal** build per platform instead of one
+build per instruction set. A universal build picks the fastest code path the
+CPU supports when it starts, so the same download suits every machine.
 
-**Linux cluster (production data).** Building from the release tag gives a
-binary tuned to the cluster's CPUs:
+**Windows (development).** From the
+[GitHub releases](https://github.com/official-stockfish/Stockfish/releases),
+download `stockfish-windows-x86-64-universal.zip`, unzip it and copy the
+executable to `bin/stockfish.exe`.
+
+**Linux cluster (production data).** Download
+`stockfish-linux-x86-64-universal.tar.gz`, then:
+
+```bash
+tar -xzf stockfish-linux-x86-64-universal.tar.gz
+ls stockfish/                       # find the executable's name
+cp stockfish/<executable> <repo>/engines/stockfish/bin/stockfish
+chmod +x <repo>/engines/stockfish/bin/stockfish
+```
+
+If the archive holds files the executable needs alongside it (for example a
+separate network file), copy them into `bin/` too and record them in
+`engine.toml` so their hashes are checked.
+
+If the binary fails with a `GLIBC` version error, the cluster's system
+libraries are too old for the release build. Build from source instead:
 
 ```bash
 git clone --depth 1 --branch sf_19 https://github.com/official-stockfish/Stockfish.git /tmp/sf
 cd /tmp/sf/src
-make -j profile-build ARCH=x86-64-avx2      # or ARCH=native on the compute node type
+make -j profile-build ARCH=x86-64-vnni512   # matches Cascade Lake nodes; see `make help`
 cp stockfish <repo>/engines/stockfish/bin/stockfish
 ```
 
 Check the tag name on the releases page if `sf_19` doesn't resolve.
+
+## Check that PC and cluster search identically
+
+Because a universal build may run a different internal code path on your PC
+(AMD Zen 4) than on the cluster (Intel Cascade Lake), confirm once that they
+agree. Stockfish's `bench` prints a node count that should be identical on
+any CPU for the same version:
+
+```bash
+./bin/stockfish bench 2>&1 | grep -E "Nodes searched|Nodes/second"
+```
+
+Run it on your PC and on a compute node: "Nodes searched" must match; only
+"Nodes/second" should differ.
 
 ## Verify
 
@@ -30,8 +62,3 @@ python code/setup_engines.py check  --engine stockfish
 python code/setup_engines.py smoke  --engine stockfish
 python code/setup_engines.py record --engine stockfish   # then commit engines/engines.lock.json
 ```
-
-Stockfish's `bench` command prints a node count that is identical across
-CPU architectures for the same source version. Running `./bin/stockfish bench`
-on your PC and on the cluster and comparing the "Nodes searched" line is a
-quick check that both builds search identically.
