@@ -5,7 +5,7 @@
 
 [engine]
 name = "Caissa"
-version = "1.25"
+version = "2.0"
 search_type = "alpha-beta, NNUE"
 training_lineage = "Independent: own self-play games"
 license = "MIT"
