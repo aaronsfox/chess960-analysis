@@ -5,12 +5,19 @@ position's White advantage with several chess engines, separates real
 differences between positions from measurement noise, and tests whether those
 differences show up in game outcomes.
 
-- **Aim 1 — starting-position evaluation** (`code/evaluate_sp.py`, in progress).
-  Evaluate all 960 positions with four engines across a ladder of node budgets. Primary
-  variables: expected score, its Elo-equivalent, and convergence with search
-  effort. Secondary: agreement and disagreement between engines.
-- **Aim 2 — engine self-play outcomes.** Planned.
-- **Aim 3 — practical fairness for human play and tournaments.** Planned.
+The project has three parts:
+
+- **Evaluating starting positions** (`code/evaluate_sp.py`, in progress).
+  Evaluate all 960 positions with four engines across a ladder of node
+  budgets. Primary variables: expected score, its Elo-equivalent, and
+  convergence with search effort. Secondary: agreement and disagreement
+  between engines.
+- **Self-play outcomes** (planned). Test whether evaluated differences between
+  positions appear in the results of engine self-play games, and how they
+  change with engine strength.
+- **Fairness in human play and tournaments** (planned). Compare the engine
+  results with human games, and assess what position differences mean for
+  tournament formats.
 
 ## Repository layout
 

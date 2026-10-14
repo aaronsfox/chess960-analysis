@@ -1,6 +1,6 @@
 """Shared helpers for the Chess960 fairness project.
 
-Used by every aim. Covers:
+Used by every part of the project. Covers:
 
 * the 960 starting positions (Scharnagl numbering, #518 = standard chess);
 * engine manifests (``engines/<name>/engine.toml``) and SHA-256 checks
@@ -424,7 +424,7 @@ def elo_from_expected(expected: float, eps: float = 1e-6) -> float:
 def expected_from_cp(cp: float, scale: float, offset: float = 0.0) -> float:
     """Logistic map from centipawns to expected score.
 
-    ``scale`` and ``offset`` must be fitted (e.g. to Aim 2 outcomes) for each
+    ``scale`` and ``offset`` must be fitted (e.g. to self-play outcomes) for each
     engine that reports no WDL; there is no universal default.
     """
     return 1.0 / (1.0 + math.exp(-(cp - offset) / scale))
