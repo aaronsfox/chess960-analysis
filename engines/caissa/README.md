@@ -16,26 +16,34 @@ The binary goes in `engines/caissa/bin/` (git ignores that folder).
 
 **Windows (development).** Download the release build for your CPU from the
 [2.0 release page](https://github.com/Witek902/Caissa/releases/tag/2.0) and
-rename it to `bin/caissa.exe`. Builds are offered for `avx512icl`, `avx512`,
-`bmi2`, `avx2` and `sse4-popcnt`/`sse2`. Most modern CPUs run `bmi2`;
-`avx512icl` needs an Intel Ice Lake (or newer) or AMD Zen 4 CPU.
+rename it to `bin/caissa.exe`. The release files are
+`caissa-2.0-x64-<build>.exe` for `avx512icl`, `avx512`, `avx2-bmi2`, `avx2`,
+`sse4-popcnt` and `sse2`. Most modern CPUs run `avx2-bmi2`; `avx512icl` needs
+an Intel Ice Lake (or newer) or AMD Zen 4 CPU.
 
-**Linux cluster (production data).** Use the matching Linux release build if
-one is offered, or build from the `2.0` tag with CMake:
+**Linux cluster (production data).** The 2.0 release has Windows builds only,
+so build from source. Caissa's `src/makefile` needs only `make` and GCC 10+
+(no CMake). It has a target per instruction set and downloads the network
+file from the Caissa-Nets repository, embedding it in the binary, so run it
+on a login node with internet access:
 
 ```bash
-git clone --depth 1 --branch 2.0 https://github.com/Witek902/Caissa.git /tmp/caissa
-cd /tmp/caissa && mkdir build && cd build
-cmake -DTARGET_ARCH=x64-bmi2 -DCMAKE_BUILD_TYPE=Final ..
-make -j
-cp bin/caissa <repo>/engines/caissa/bin/caissa   # output path may differ; check Caissa's README
+module load gcc                     # GCC 10+ for C++20; check `g++ --version`
+git clone --depth 1 --branch 2.0 https://github.com/Witek902/Caissa.git /tmp/caissa-build
+cd /tmp/caissa-build/src
+make -j4 avx512                     # or bmi2; avoid avx512icl on Cascade Lake
+ls -lt | head                       # the newest executable is the build
+cp <built-executable> <repo>/engines/caissa/bin/caissa
+chmod +x <repo>/engines/caissa/bin/caissa
 ```
 
-Since version 1.26, Caissa's network files (`.pnn`) are kept in a separate
-Caissa-Nets repository and the build downloads them automatically. Release
-binaries are meant to run as downloaded. If your build instead needs the
-network set with `EvalFile`, put the file in `networks/` and uncomment the
-`[network]` section in `engine.toml`, so the file's hash is recorded.
+Match the Windows release file to the Linux target: `avx512` with
+`caissa-2.0-x64-avx512.exe`, or `bmi2` with `caissa-2.0-x64-avx2-bmi2.exe`.
+
+If the network download fails, get the `.pnn` file named in the build error
+from the Caissa-Nets releases, put it in `data/neuralNets/`, and run `make`
+again. If you prefer CMake, `pip install cmake` in the project environment
+installs it without admin rights.
 
 ## Use the same build type everywhere
 
