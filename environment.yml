@@ -1,0 +1,18 @@
+# Conda environment for the Chess960 fairness project.
+#   conda env create -f environment.yml
+#   conda activate chess960
+# After changing dependencies: conda env update -f environment.yml --prune
+# Keep the versions here in step with pyproject.toml.
+name: chess960
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy>=1.26
+  - pandas>=2.2
+  - pyarrow>=15
+  - pytest>=8
+  - pip
+  - pip:
+      # python-chess is published on PyPI as "chess"
+      - chess>=1.11

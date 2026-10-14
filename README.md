@@ -42,15 +42,28 @@ results/            outputs (not committed)
 
 ## Setup
 
-Requires Python 3.11+. With [uv](https://docs.astral.sh/uv/):
+Requires Python 3.11+. Use one of these.
+
+**Conda** (`environment.yml`):
+
+```bash
+conda env create -f environment.yml
+conda activate chess960
+python -m pytest             # run the tests
+```
+
+**uv** (`pyproject.toml` and `uv.lock`, exact pinned versions):
 
 ```bash
 uv sync                      # creates .venv with the locked dependencies
-uv run python -m pytest      # run the tests
+uv run python -m pytest
 ```
 
-Or with pip: `python -m venv .venv`, activate it, then
+**pip**: `python -m venv .venv`, activate it, then
 `pip install chess numpy pandas pyarrow pytest`.
+
+On the cluster, use the same method as on your PC so both machines run the
+same package versions.
 
 Then install each engine as described in `engines/<name>/README.md`, and:
 
