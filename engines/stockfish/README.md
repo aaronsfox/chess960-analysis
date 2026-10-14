@@ -30,16 +30,16 @@ separate network file), copy them into `bin/` too and record them in
 `engine.toml` so their hashes are checked.
 
 If the binary fails with a `GLIBC` version error, the cluster's system
-libraries are too old for the release build. Build from source instead:
+libraries are too old for the release build. Build from source instead
+(login node; the build downloads Stockfish's network):
 
 ```bash
-git clone --depth 1 --branch sf_19 https://github.com/official-stockfish/Stockfish.git /tmp/sf
-cd /tmp/sf/src
-make -j profile-build ARCH=x86-64-vnni512   # matches Cascade Lake nodes; see `make help`
-cp stockfish <repo>/engines/stockfish/bin/stockfish
+module load GCC/10.2.0                          # your cluster's module name
+bash engines/stockfish/build_linux.sh           # ARCH=x86-64-vnni512 by default
 ```
 
-Check the tag name on the releases page if `sf_19` doesn't resolve.
+See the comments at the top of `build_linux.sh` for the settings (`ARCH`,
+`SF_VERSION`, `PGO`).
 
 ## Check that PC and cluster search identically
 

@@ -22,7 +22,8 @@ The project has three parts:
 ## Repository layout
 
 ```
-engines/            one folder per engine: manifest, install notes, bin/ (not committed)
+engines/            one folder per engine: manifest, install notes, Linux build
+                    script, bin/ (not committed)
   stockfish/  lc0/  caissa/  plentychess/
   engines.lock.json SHA-256 of every installed engine binary and network
 config/             study settings (node budgets, output paths, position lists)
@@ -74,7 +75,9 @@ uv run python -m pytest
 On the cluster, use the same method as on your PC so both machines run the
 same package versions.
 
-Then install each engine as described in `engines/<name>/README.md`, and:
+Then install each engine as described in `engines/<name>/README.md`. On the
+Linux cluster, each engine folder has a `build_linux.sh`; `engines/README.md`
+lists them and their settings. Then:
 
 ```bash
 python code/setup_engines.py check     # all engines present and configured?

@@ -22,28 +22,23 @@ rename it to `bin/caissa.exe`. The release files are
 an Intel Ice Lake (or newer) or AMD Zen 4 CPU.
 
 **Linux cluster (production data).** The 2.0 release has Windows builds only,
-so build from source. Caissa's `src/makefile` needs only `make` and GCC 10+
-(no CMake). It has a target per instruction set and downloads the network
-file from the Caissa-Nets repository, embedding it in the binary, so run it
-on a login node with internet access:
+so build from source with `build_linux.sh`. It needs `make`, GCC 10+ (C++20)
+and internet access, because the build downloads Caissa's network from the
+Caissa-Nets repository and embeds it, so run it on a login node. No CMake is
+needed:
 
 ```bash
-module load gcc                     # GCC 10+ for C++20; check `g++ --version`
-git clone --depth 1 --branch 2.0 https://github.com/Witek902/Caissa.git /tmp/caissa-build
-cd /tmp/caissa-build/src
-make -j4 avx512                     # or bmi2; avoid avx512icl on Cascade Lake
-ls -lt | head                       # the newest executable is the build
-cp <built-executable> <repo>/engines/caissa/bin/caissa
-chmod +x <repo>/engines/caissa/bin/caissa
+module load GCC/10.2.0                          # GCC 10+; your cluster's module name
+bash engines/caissa/build_linux.sh              # ARCH=avx512 by default
 ```
 
 Match the Windows release file to the Linux target: `avx512` with
-`caissa-2.0-x64-avx512.exe`, or `bmi2` with `caissa-2.0-x64-avx2-bmi2.exe`.
-
-If the network download fails, get the `.pnn` file named in the build error
-from the Caissa-Nets releases, put it in `data/neuralNets/`, and run `make`
-again. If you prefer CMake, `pip install cmake` in the project environment
-installs it without admin rights.
+`caissa-2.0-x64-avx512.exe`, or `ARCH=bmi2` with
+`caissa-2.0-x64-avx2-bmi2.exe`. Avoid `avx512icl` on Cascade Lake nodes. If
+GCC 10 rejects some C++20 code, use a newer compiler (e.g. conda's
+`gxx_linux-64`) with `CC=x86_64-conda-linux-gnu-g++`. If the network download
+fails, get the `.pnn` file named in the error from the Caissa-Nets releases,
+put it in the build's `data/neuralNets/` folder and rerun `make` there.
 
 ## Use the same build type everywhere
 
