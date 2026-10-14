@@ -9,9 +9,9 @@
 #
 # Settings (environment variables):
 #   SF_VERSION  release tag                     (default sf_19)
-#   ARCH        instruction set, see `make help` (default x86-64-vnni512, for
-#               Intel Cascade Lake; x86-64-avx512, x86-64-bmi2 or x86-64-avx2
-#               for other CPUs)
+#   ARCH        instruction set, see `make help` (default x86-64-bmi2, which
+#               runs on the cluster nodes and the Zen 4 PC; x86-64-vnni512 or
+#               x86-64-avx512 may be faster on Cascade Lake)
 #   PGO=1       profile-guided build: faster, but runs the new binary during
 #               the build, so the build machine must support ARCH
 #
@@ -20,7 +20,7 @@
 set -euo pipefail
 
 VERSION="${SF_VERSION:-sf_19}"
-ARCH="${ARCH:-x86-64-vnni512}"
+ARCH="${ARCH:-x86-64-bmi2}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="${TMPDIR:-/tmp}/stockfish-build-${VERSION}"
 

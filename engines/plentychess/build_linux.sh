@@ -9,7 +9,7 @@
 # Settings (environment variables):
 #   PLENTY_VERSION  release tag                 (default b-v8.0.0)
 #   ARCH            generic, ssse3, fma, avx2, bmi2, avx512, avx512vbmi2
-#                   (default avx512; avoid avx512vbmi2 on Cascade Lake).
+#                   (default bmi2; avoid avx512vbmi2 on Cascade Lake).
 #                   Use the same architecture as your Windows build.
 #   CXX             C++ compiler                (default g++; the makefile's
 #                   own default is clang++)
@@ -21,7 +21,7 @@
 set -euo pipefail
 
 VERSION="${PLENTY_VERSION:-b-v8.0.0}"
-ARCH="${ARCH:-avx512}"
+ARCH="${ARCH:-bmi2}"
 COMPILER="${CXX:-g++}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="${TMPDIR:-/tmp}/plentychess-build-${VERSION}"

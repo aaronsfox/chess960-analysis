@@ -29,7 +29,7 @@ on a login node:
 
 ```bash
 module load GCC/10.2.0                          # your cluster's module name
-bash engines/plentychess/build_linux.sh         # ARCH=avx512, CXX=g++ by default
+bash engines/plentychess/build_linux.sh         # ARCH=bmi2, CXX=g++ by default
 ```
 
 `ARCH` takes `generic`, `ssse3`, `fma`, `avx2`, `bmi2`, `avx512` or
@@ -41,7 +41,7 @@ adds it). If the build stops on `numa.h` or `-lnuma`, load the cluster's
 
 ## Use the same build type everywhere
 
-Pick one architecture build (for example `avx512`) that runs on both your PC
+Pick one architecture build (`bmi2` by default) that runs on both your PC
 and the cluster's compute nodes, and use it on both. Different builds use
 different vector code paths, which can change results slightly. Your Windows
 release build and your GCC-built Linux binary also come from different

@@ -29,12 +29,12 @@ needed:
 
 ```bash
 module load GCC/10.2.0                          # GCC 10+; your cluster's module name
-bash engines/caissa/build_linux.sh              # ARCH=avx512 by default
+bash engines/caissa/build_linux.sh              # ARCH=bmi2 by default
 ```
 
-Match the Windows release file to the Linux target: `avx512` with
-`caissa-2.0-x64-avx512.exe`, or `ARCH=bmi2` with
-`caissa-2.0-x64-avx2-bmi2.exe`. Avoid `avx512icl` on Cascade Lake nodes. If
+Match the Windows release file to the Linux target: the default `bmi2` with
+`caissa-2.0-x64-avx2-bmi2.exe`, or `ARCH=avx512` with
+`caissa-2.0-x64-avx512.exe`. Avoid `avx512icl` on Cascade Lake nodes. If
 GCC 10 rejects some C++20 code, use a newer compiler (e.g. conda's
 `gxx_linux-64`) with `CC=x86_64-conda-linux-gnu-g++`. If the network download
 fails, get the `.pnn` file named in the error from the Caissa-Nets releases,

@@ -7,10 +7,10 @@
 #
 # Settings (environment variables):
 #   CAISSA_VERSION  release tag                 (default 2.0)
-#   ARCH            makefile target: avx512, bmi2, avx2, avx2-vnni, sse4, sse2
-#                   (default avx512; avoid avx512icl on Cascade Lake). Match the
-#                   Windows release file: avx512 <-> caissa-2.0-x64-avx512.exe,
-#                   bmi2 <-> caissa-2.0-x64-avx2-bmi2.exe
+#   ARCH            makefile target: bmi2, avx2, avx2-vnni, avx512, sse4, sse2
+#                   (default bmi2; avoid avx512icl on Cascade Lake). Match the
+#                   Windows release file: bmi2 <-> caissa-2.0-x64-avx2-bmi2.exe,
+#                   avx512 <-> caissa-2.0-x64-avx512.exe
 #   CC              C++ compiler                (default g++; Caissa's makefile
 #                   uses CC for C++)
 #
@@ -20,7 +20,7 @@
 set -euo pipefail
 
 VERSION="${CAISSA_VERSION:-2.0}"
-ARCH="${ARCH:-avx512}"
+ARCH="${ARCH:-bmi2}"
 COMPILER="${CC:-g++}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK="${TMPDIR:-/tmp}/caissa-build-${VERSION}"

@@ -39,9 +39,9 @@ LC0_CUDA_CC=80 bash engines/lc0/build_linux.sh   # GPU build for the A100; needs
 
 | Engine | Default build | Override with |
 | --- | --- | --- |
-| Stockfish | `ARCH=x86-64-vnni512` (Cascade Lake), no PGO | `ARCH`, `SF_VERSION`, `PGO=1` |
-| Caissa | `ARCH=avx512`, `CC=g++` | `ARCH`, `CAISSA_VERSION`, `CC` |
-| PlentyChess | `ARCH=avx512`, `CXX=g++`, no PGO | `ARCH`, `PLENTY_VERSION`, `CXX`, `PGO=1` |
+| Stockfish | `ARCH=x86-64-bmi2`, no PGO | `ARCH`, `SF_VERSION`, `PGO=1` |
+| Caissa | `ARCH=bmi2`, `CC=g++` | `ARCH`, `CAISSA_VERSION`, `CC` |
+| PlentyChess | `ARCH=bmi2`, `CXX=g++`, no PGO | `ARCH`, `PLENTY_VERSION`, `CXX`, `PGO=1` |
 | Lc0 | CUDA for compute capability `LC0_CUDA_CC`, portable CPU code | `LC0_CUDA_CC`, `LC0_VERSION` |
 
 Builds skip profile-guided optimisation by default, because that step runs

@@ -35,7 +35,7 @@ libraries are too old for the release build. Build from source instead
 
 ```bash
 module load GCC/10.2.0                          # your cluster's module name
-bash engines/stockfish/build_linux.sh           # ARCH=x86-64-vnni512 by default
+bash engines/stockfish/build_linux.sh           # ARCH=x86-64-bmi2 by default
 ```
 
 See the comments at the top of `build_linux.sh` for the settings (`ARCH`,
