@@ -1,0 +1,3 @@
+{
+  "_comment": "SHA-256 of each engine binary and network, per platform. Written by `python code/setup_engines.py record`; checked before every run."
+}

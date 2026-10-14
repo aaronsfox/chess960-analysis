@@ -1,0 +1,8 @@
+# Pilot positions (Scharnagl ids). Use with --positions @config/pilot_positions.txt
+#
+# Placeholder until the pilot set is finalised: the plan calls for ~30
+# positions stratified on published evaluations (8 high, 8 low, 10 middle),
+# plus #518 and a few mirror partners.
+518   # standard chess, RNBQKBNR
+80    # BBNNRKRQ: highest evaluation in the Sesse and Kisir studies
+644   # RBBNKRQN: lowest evaluation in the Kisir study

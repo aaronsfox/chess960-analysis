@@ -1,0 +1,39 @@
+# Lc0 (Leela Chess Zero): neural-network MCTS, run on CPU like the other
+# engines. Binaries and networks are not committed. Install as described in
+# README.md, then run
+#   python code/setup_engines.py record --engine lc0
+
+[engine]
+name = "Lc0"
+version = "0.32.1"
+search_type = "neural MCTS"
+training_lineage = "Lc0 self-play"
+license = "GPL-3.0"
+homepage = "https://lczero.org"
+smoke_nodes = 50
+
+[binary]
+linux = "bin/lc0"
+windows = "bin/lc0.exe"
+darwin = "bin/lc0"
+
+[network]
+# Chosen in the pilot from measured CPU nodes per second. Update the file
+# name here once chosen; the file's hash is recorded in the lock file.
+file = "networks/network.pb.gz"
+uci_option = "WeightsFile"
+
+[uci_options]
+Threads = 1
+UCI_ShowWDL = true
+# Search exactly the node budget instead of stopping early when the best
+# move can no longer change.
+SmartPruningFactor = 0
+
+[optional_uci_options]
+
+[environment]
+# Keep the BLAS backend on one core so each search uses one CPU.
+OPENBLAS_NUM_THREADS = 1
+OMP_NUM_THREADS = 1
+MKL_NUM_THREADS = 1

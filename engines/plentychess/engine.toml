@@ -1,0 +1,26 @@
+# PlentyChess: alpha-beta search with NNUE evaluation, trained on its own
+# self-generated positions (standard and Chess960).
+# Binaries are not committed. Install as described in README.md, then run
+#   python code/setup_engines.py record --engine plentychess
+
+[engine]
+name = "PlentyChess"
+version = "7.0.0"
+search_type = "alpha-beta, NNUE"
+training_lineage = "Independent: own self-generated positions"
+license = "GPL-3.0"
+homepage = "https://github.com/Yoshie2000/PlentyChess"
+smoke_nodes = 5000
+
+[binary]
+linux = "bin/plentychess"
+windows = "bin/plentychess.exe"
+darwin = "bin/plentychess"
+
+[uci_options]
+Threads = 1
+Hash = 1024
+
+[optional_uci_options]
+# If absent, expected score is derived later from a fitted cp calibration.
+UCI_ShowWDL = true

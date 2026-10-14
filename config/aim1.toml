@@ -1,0 +1,20 @@
+# Aim 1: starting-position evaluation.
+# Every budget is a separate, fresh, single-threaded search.
+
+[output]
+# Relative to the repository root. Git ignores results/.
+dir = "results/aim1"
+
+[budgets]
+# Node budgets per engine (folder name under engines/), on a log scale.
+stockfish   = [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000]
+caissa      = [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000]
+plentychess = [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000]
+# An Lc0 node is a full network evaluation. The top budget (1e5 or 1e6) is
+# set in the pilot from measured CPU speed.
+lc0         = [100, 1_000, 10_000, 100_000, 1_000_000]
+
+[multipv]
+# MultiPV = 1 runs at every budget. Higher settings (run with --multipv 5)
+# use each engine's top budget only.
+top_budget_only = true

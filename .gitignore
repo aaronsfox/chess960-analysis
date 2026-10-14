@@ -1,0 +1,23 @@
+# Engine binaries and networks are installed locally, never committed
+engines/*/bin/*
+engines/*/networks/*
+!engines/*/bin/.gitkeep
+!engines/*/networks/.gitkeep
+
+# Results and logs (archived separately, e.g. on Zenodo)
+results/
+logs/
+*.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
