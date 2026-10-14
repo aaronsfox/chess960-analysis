@@ -336,14 +336,22 @@ def apply_options(engine: chess.engine.SimpleEngine, cfg: EngineConfig) -> dict[
 
 
 def open_engine(
-    cfg: EngineConfig, strict_lock: bool = True, startup_timeout: float = 300.0
+    cfg: EngineConfig, strict_lock: bool = True, startup_timeout: float = 300.0,
+    check_lock: bool = True,
 ) -> tuple[chess.engine.SimpleEngine, dict[str, Any]]:
     """Start an engine with the manifest's options.
 
     Returns the engine and a metadata dict (hashes, id, applied options and
     every option's default) to store alongside results.
+
+    ``check_lock=False`` skips the lock-file comparison entirely. Only the
+    setup tools use it (to inspect or re-record an engine whose files have
+    changed); evaluation runs always check.
     """
-    fingerprint = verify_engine_files(cfg, strict=strict_lock)
+    if check_lock:
+        fingerprint = verify_engine_files(cfg, strict=strict_lock)
+    else:
+        fingerprint = engine_fingerprint(cfg)
     env = os.environ.copy()
     env.update(cfg.environment)
     engine = chess.engine.SimpleEngine.popen_uci(

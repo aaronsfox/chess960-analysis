@@ -67,9 +67,10 @@ def cmd_check(args: argparse.Namespace) -> int:
             elif all(entry.get(k) == fp[k] for k in ("binary_sha256", "network_sha256")):
                 print("   lock     : matches")
             else:
-                print("   lock     : MISMATCH: files differ from the recorded hashes")
+                print("   lock     : MISMATCH: files differ from the recorded hashes "
+                      "(if you rebuilt or upgraded this engine on purpose, run `record`)")
                 ok = False
-            engine, meta = open_engine(cfg, strict_lock=False)
+            engine, meta = open_engine(cfg, check_lock=False)
             try:
                 print(f"   id name  : {meta['engine_id_name']}")
                 if not meta["version_matches_id"]:
@@ -100,7 +101,7 @@ def cmd_record(args: argparse.Namespace) -> int:
         try:
             cfg = load_engine_config(key)
             fp = engine_fingerprint(cfg)
-            engine, meta = open_engine(cfg, strict_lock=False)
+            engine, meta = open_engine(cfg, check_lock=False)
             engine.quit()
         except (EngineSetupError, chess.engine.EngineError, OSError) as exc:
             log.error("%s: %s", key, exc)
@@ -126,7 +127,7 @@ def cmd_smoke(args: argparse.Namespace) -> int:
         cfg = load_engine_config(key)
         nodes = args.nodes or cfg.smoke_nodes
         try:
-            engine, _ = open_engine(cfg, strict_lock=False)
+            engine, _ = open_engine(cfg, check_lock=False)
         except (EngineSetupError, chess.engine.EngineError, OSError) as exc:
             log.error("%s: %s", key, exc)
             status = 1
