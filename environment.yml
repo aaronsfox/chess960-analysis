@@ -3,9 +3,17 @@
 #   conda activate chess960
 # After changing dependencies: conda env update -f environment.yml --prune
 # Keep the versions here in step with pyproject.toml.
+#
+# If conda is killed while "collecting package metadata" (common on cluster
+# login nodes with per-user memory limits), create just Python and pip-install
+# the rest instead:
+#   conda create -n chess960 python=3.12 -y
+#   conda activate chess960
+#   pip install chess numpy pandas pyarrow pytest
 name: chess960
 channels:
   - conda-forge
+  - nodefaults   # don't also load Anaconda's default channels (saves memory)
 dependencies:
   - python=3.12
   - numpy>=1.26
