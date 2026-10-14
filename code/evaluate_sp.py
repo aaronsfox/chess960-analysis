@@ -283,6 +283,20 @@ def cmd_collect(args: argparse.Namespace) -> int:
     raw = pd.concat((pd.read_parquet(f) for f in files), ignore_index=True)
     log.info("read %d files, %d info lines", len(files), len(raw))
 
+    # Keep only the budgets in the current config, so searches from an older
+    # ladder (e.g. 1e9 nodes) don't mix into the tables.
+    if not args.all_budgets:
+        allowed = {engine: set(b) for engine, b in config["budgets"].items()}
+        keep = [
+            engine not in allowed or budget in allowed[engine]
+            for engine, budget in zip(raw["engine"], raw["budget_nodes"])
+        ]
+        dropped = raw.loc[[not k for k in keep]]
+        if len(dropped):
+            for (engine, budget), n in dropped.groupby(["engine", "budget_nodes"]).size().items():
+                log.info("ignoring %d info lines for %s at %d nodes (not in config)", n, engine, budget)
+        raw = raw.loc[keep].reset_index(drop=True)
+
     summary_cols = [
         "engine", "engine_version", "position_id", "arrangement", "fen",
         "multipv_setting", "multipv_index", "budget_nodes", "depth", "seldepth",
@@ -331,6 +345,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     collect = sub.add_parser("collect", parents=[common], help="combine results into tables")
     collect.add_argument("--engine", help="only this engine (default: all)")
+    collect.add_argument("--all-budgets", action="store_true",
+                         help="keep searches at budgets no longer in the config")
     collect.set_defaults(func=cmd_collect)
     return parser
 
