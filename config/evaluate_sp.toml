@@ -1,9 +1,9 @@
-# Aim 1: starting-position evaluation.
+# evaluate_sp: settings for evaluating the 960 starting positions.
 # Every budget is a separate, fresh, single-threaded search.
 
 [output]
 # Relative to the repository root. Git ignores results/.
-dir = "results/aim1"
+dir = "results/evaluate_sp"
 
 [budgets]
 # Node budgets per engine (folder name under engines/), on a log scale.

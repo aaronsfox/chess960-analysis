@@ -5,8 +5,8 @@ position's White advantage with several chess engines, separates real
 differences between positions from measurement noise, and tests whether those
 differences show up in game outcomes.
 
-- **Aim 1 — starting-position evaluation** (in progress). Evaluate all 960
-  positions with four engines across a ladder of node budgets. Primary
+- **Aim 1 — starting-position evaluation** (`code/evaluate_sp.py`, in progress).
+  Evaluate all 960 positions with four engines across a ladder of node budgets. Primary
   variables: expected score, its Elo-equivalent, and convergence with search
   effort. Secondary: agreement and disagreement between engines.
 - **Aim 2 — engine self-play outcomes.** Planned.
@@ -22,13 +22,13 @@ config/             study settings (node budgets, output paths, position lists)
 code/
   utils.py          shared helpers: positions, engine setup, metrics, IO
   setup_engines.py  check, fingerprint and smoke-test the engines
-  aim1_evaluate.py  Aim 1: run evaluations and collect results
+  evaluate_sp.py    evaluate starting positions and collect results
 jobs/               SLURM job scripts for the cluster
 tests/              unit tests (pytest)
 results/            outputs (not committed)
 ```
 
-## Design choices that keep Aim 1 deterministic
+## Design choices that keep the evaluations deterministic
 
 - Every search is **single-threaded** and limited by **node count**, not time,
   so the result doesn't depend on hardware speed and a rerun gives the same answer.
@@ -73,38 +73,38 @@ python code/setup_engines.py smoke     # legal moves on all 960 positions?
 python code/setup_engines.py record    # write hashes; commit engines.lock.json
 ```
 
-## Running Aim 1
+## Evaluating starting positions (evaluate_sp.py)
 
 ```bash
 # A quick test on three positions with small budgets
-python code/aim1_evaluate.py run --engine stockfish --positions 80,518,644 \
+python code/evaluate_sp.py run --engine stockfish --positions 80,518,644 \
     --budgets 10000 100000 --allow-unlocked --output-dir results/test
 
 # Full ladder for the pilot positions
-python code/aim1_evaluate.py run --engine stockfish --positions @config/pilot_positions.txt
+python code/evaluate_sp.py run --engine stockfish --positions @config/pilot_positions.txt
 
 # MultiPV = 5 at the top budget
-python code/aim1_evaluate.py run --engine stockfish --multipv 5
+python code/evaluate_sp.py run --engine stockfish --multipv 5
 
-# Combine everything into tables in results/aim1/tables/
-python code/aim1_evaluate.py collect
+# Combine everything into tables in results/evaluate_sp/tables/
+python code/evaluate_sp.py collect
 ```
 
-`run` writes one Parquet file per position under `results/aim1/raw/` and skips
+`run` writes one Parquet file per position under `results/evaluate_sp/raw/` and skips
 positions already done, so an interrupted run resumes where it stopped.
 `collect` writes:
 
 | File | Contents |
 | --- | --- |
-| `aim1_info_lines.parquet` | Every UCI info line from every search |
-| `aim1_final.parquet` / `.csv` | One row per search and principal variation: final score, WDL, expected score, Elo-equivalent |
-| `aim1_convergence.csv` | Per engine and position: top-budget values, total variation and tail drift across budgets |
+| `evaluate_sp_info_lines.parquet` | Every UCI info line from every search |
+| `evaluate_sp_final.parquet` / `.csv` | One row per search and principal variation: final score, WDL, expected score, Elo-equivalent |
+| `evaluate_sp_convergence.csv` | Per engine and position: top-budget values, total variation and tail drift across budgets |
 
 On the cluster (create `logs/` first):
 
 ```bash
 mkdir -p logs
-sbatch --export=ALL,ENGINE=stockfish jobs/aim1_array.slurm
+sbatch --export=ALL,ENGINE=stockfish jobs/evaluate_sp_array.slurm
 ```
 
 ## Positions

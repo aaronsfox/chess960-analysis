@@ -1,6 +1,6 @@
-"""Aim 1: starting-position evaluation.
+"""evaluate_sp: evaluate the Chess960 starting positions.
 
-Evaluates Chess960 starting positions with one engine at a ladder of node
+Evaluates starting positions with one engine at a ladder of node
 budgets. Every budget is a separate, fresh, single-threaded search, so each
 value is exactly what an N-node search returns and reruns are reproducible.
 
@@ -13,9 +13,9 @@ collect  Combine the per-position files into tidy tables: every info line,
 
 Examples
 --------
-    python code/aim1_evaluate.py run --engine stockfish --positions 0-959
-    python code/aim1_evaluate.py run --engine stockfish --positions 518 --multipv 5
-    python code/aim1_evaluate.py collect
+    python code/evaluate_sp.py run --engine stockfish --positions 0-959
+    python code/evaluate_sp.py run --engine stockfish --positions 518 --multipv 5
+    python code/evaluate_sp.py collect
 """
 
 from __future__ import annotations
@@ -53,9 +53,9 @@ from utils import (
     write_parquet_atomic,
 )
 
-log = logging.getLogger("chess960.aim1")
+log = logging.getLogger("chess960.evaluate_sp")
 
-DEFAULT_CONFIG = CONFIG_DIR / "aim1.toml"
+DEFAULT_CONFIG = CONFIG_DIR / "evaluate_sp.toml"
 
 
 # ---------------------------------------------------------------------------
@@ -294,10 +294,10 @@ def cmd_collect(args: argparse.Namespace) -> int:
     convergence = convergence_table(summary)
 
     tables = out_dir / "tables"
-    write_parquet_atomic(raw, tables / "aim1_info_lines.parquet")
-    write_parquet_atomic(summary, tables / "aim1_final.parquet")
-    summary.to_csv(tables / "aim1_final.csv", index=False)
-    convergence.to_csv(tables / "aim1_convergence.csv", index=False)
+    write_parquet_atomic(raw, tables / "evaluate_sp_info_lines.parquet")
+    write_parquet_atomic(summary, tables / "evaluate_sp_final.parquet")
+    summary.to_csv(tables / "evaluate_sp_final.csv", index=False)
+    convergence.to_csv(tables / "evaluate_sp_convergence.csv", index=False)
     log.info("wrote %s (%d searches, %d engine-position pairs)",
              tables, len(summary), len(convergence))
     return 0
