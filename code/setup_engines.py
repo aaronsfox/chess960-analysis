@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 
 import chess
 import chess.engine
@@ -131,8 +132,14 @@ def cmd_smoke(args: argparse.Namespace) -> int:
             status = 1
             continue
         failures = []
+        pos_ids = parse_position_spec(args.positions)
+        log.info("%s: smoke test on %d positions at %d nodes each", key, len(pos_ids), nodes)
+        start = time.perf_counter()
         try:
-            for pos_id in parse_position_spec(args.positions):
+            for n, pos_id in enumerate(pos_ids, 1):
+                if n == 1 or n % 50 == 0 or n == len(pos_ids):
+                    elapsed = time.perf_counter() - start
+                    log.info("%s: position %d/%d (%.0fs elapsed)", key, n, len(pos_ids), elapsed)
                 board = get_position(pos_id).board()
                 try:
                     result = engine.play(board, chess.engine.Limit(nodes=nodes), game=object())
