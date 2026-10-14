@@ -10,7 +10,9 @@ search_type = "neural MCTS"
 training_lineage = "Lc0 self-play"
 license = "GPL-3.0"
 homepage = "https://lczero.org"
-smoke_nodes = 50
+# One node = the network's top policy move: enough to check legal Chess960
+# moves (including castling) without a slow search on CPU.
+smoke_nodes = 1
 
 [binary]
 linux = "bin/lc0"
