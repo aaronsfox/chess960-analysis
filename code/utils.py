@@ -21,6 +21,7 @@ import math
 import os
 import platform
 import socket
+import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass, field
@@ -223,7 +224,10 @@ def load_engine_config(key: str) -> EngineConfig:
         binary=folder / rel,  # not resolved: keep symlinks pointing into bin/
         network=network,
         network_option=net.get("uci_option"),
-        uci_options=dict(data.get("uci_options", {})),
+        # Options for every platform, plus any for this platform only
+        # (e.g. a GPU backend on the Linux cluster).
+        uci_options={**data.get("uci_options", {}),
+                     **data.get("platform_uci_options", {}).get(platform_key(), {})},
         optional_uci_options=dict(data.get("optional_uci_options", {})),
         environment={k: str(v) for k, v in data.get("environment", {}).items()},
         smoke_nodes=int(info.get("smoke_nodes", 5000)),
@@ -382,12 +386,26 @@ def cpu_model() -> str:
     return platform.processor() or platform.machine()
 
 
+def gpu_model() -> str:
+    """Name(s) of the NVIDIA GPU(s) visible to this process, or "" if none."""
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=10, check=True,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    names = [line.strip() for line in out.splitlines() if line.strip()]
+    return "; ".join(names)
+
+
 def platform_info() -> dict[str, str]:
     return {
         "platform": platform_key(),
         "os": platform.platform(),
         "hostname": socket.gethostname(),
         "cpu": cpu_model(),
+        "gpu": gpu_model(),
         "python": platform.python_version(),
         "python_chess": chess.__version__,
     }

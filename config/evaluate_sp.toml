@@ -10,8 +10,8 @@ dir = "results/evaluate_sp"
 stockfish   = [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000]
 caissa      = [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000]
 plentychess = [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000]
-# An Lc0 node is a full network evaluation. The top budget (1e5 or 1e6) is
-# set in the pilot from measured CPU speed.
+# An Lc0 node is a full network evaluation. Lc0 runs on a GPU; the pilot
+# confirms the top budget (1e6) fits the time available.
 lc0         = [100, 1_000, 10_000, 100_000, 1_000_000]
 
 [multipv]

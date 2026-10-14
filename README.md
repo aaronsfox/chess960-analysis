@@ -30,7 +30,7 @@ code/
   utils.py          shared helpers: positions, engine setup, metrics, IO
   setup_engines.py  check, fingerprint and smoke-test the engines
   evaluate_sp.py    evaluate starting positions and collect results
-jobs/               SLURM job scripts for the cluster
+jobs/               SLURM job scripts (CPU engines; Lc0 on GPU)
 tests/              unit tests (pytest)
 results/            outputs (not committed)
 ```
@@ -40,7 +40,9 @@ results/            outputs (not committed)
 - Every search is **single-threaded** and limited by **node count**, not time,
   so the result doesn't depend on hardware speed and a rerun gives the same answer.
 - Each node budget is a **separate, fresh search** (`ucinewgame` first).
-- All engines, including Lc0, run on **CPU**.
+- Stockfish, Caissa and PlentyChess run on **CPU**; Lc0 runs on an
+  **NVIDIA GPU** (fp32 CUDA backend), since it is far too slow on one CPU core.
+  Node limits mean the hardware changes speed, not what a search covers.
 - Engine files are **hash-checked** against `engines/engines.lock.json` before
   every production run, and each result row records the engine hash,
   platform, host and CPU.
@@ -111,8 +113,12 @@ On the cluster (create `logs/` first):
 
 ```bash
 mkdir -p logs
-sbatch --export=ALL,ENGINE=stockfish jobs/evaluate_sp_array.slurm
+sbatch --export=ALL,ENGINE=stockfish jobs/evaluate_sp_array.slurm   # CPU engines
+sbatch jobs/evaluate_sp_lc0_gpu.slurm                               # Lc0 on a GPU
 ```
+
+Both scripts activate the `chess960` conda environment; add modules the
+engines need at run time with `--export=ALL,ENGINE=...,MODULES="..."`.
 
 ## Positions
 

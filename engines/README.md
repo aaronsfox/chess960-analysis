@@ -5,7 +5,7 @@ Each engine has its own folder:
 | Folder | Engine | Search | Training data |
 | --- | --- | --- | --- |
 | `stockfish/` | Stockfish 19 | Alpha-beta, NNUE | Largely Lc0 self-play data |
-| `lc0/` | Lc0 v0.32.1 (CPU) | Neural MCTS | Lc0 self-play |
+| `lc0/` | Lc0 v0.32.1 (GPU) | Neural MCTS | Lc0 self-play |
 | `caissa/` | Caissa 2.0 | Alpha-beta, NNUE | Own self-play games |
 | `plentychess/` | PlentyChess 8.0.0 | Alpha-beta, NNUE | Own self-generated positions |
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # evaluate_sp on a SLURM cluster: one array task per block of positions, one CPU each.
 #
-# Submit from the repository root, e.g.
+# For the CPU engines (Stockfish, Caissa, PlentyChess); Lc0 uses
+# jobs/evaluate_sp_lc0_gpu.slurm. Submit from the repository root, e.g.
 #   sbatch --export=ALL,ENGINE=stockfish jobs/evaluate_sp_array.slurm
 #   sbatch --export=ALL,ENGINE=stockfish,MULTIPV=5 jobs/evaluate_sp_array.slurm
 #
@@ -23,10 +24,18 @@ ENGINE="${ENGINE:?set ENGINE, e.g. --export=ALL,ENGINE=stockfish}"
 MULTIPV="${MULTIPV:-1}"
 POSITIONS_PER_TASK="${POSITIONS_PER_TASK:-5}"
 
-# Site-specific environment. Replace with your cluster's modules, e.g.
-#   module load python/3.12
-# and activate the project environment:
-#   source .venv/bin/activate
+# Run-time environment: any modules the engine binaries need (e.g. the GCC
+# they were built with, if they report GLIBCXX errors), and the project's
+# Python environment. Set with --export=ALL,MODULES="GCC/10.2.0".
+MODULES="${MODULES:-}"
+# Module and conda scripts can reference unset variables, so relax `set -u`.
+set +u
+if [[ -n "${MODULES}" ]]; then
+    module load ${MODULES}
+fi
+eval "$(conda shell.bash hook)"
+conda activate "${CONDA_ENV:-chess960}"
+set -u
 
 START=$(( SLURM_ARRAY_TASK_ID * POSITIONS_PER_TASK ))
 END=$(( START + POSITIONS_PER_TASK - 1 ))
