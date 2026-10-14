@@ -7,9 +7,11 @@ PlentyChess's networks are trained on its own self-generated positions,
 covering both standard chess and Chess960. Version 8.0.0 adds a threat-input
 network architecture with pawn-pair inputs, more fractional-depth search, and
 NUMA handling on Linux; its release notes report about +49 Elo over 7.0.0 in
-Double Fischer Random testing. Whether it reports win/draw/loss
-probabilities is checked by `setup_engines.py check`; if not, expected score
-is derived later from a fitted centipawn calibration.
+Double Fischer Random testing. PlentyChess reports centipawn scores
+but no win/draw/loss probabilities, and this study doesn't calibrate them.
+Its centipawns are used for ranking the positions, rank agreement with the
+other engines, and convergence across node budgets; expected score, Elo and
+draw probability come from the engines that report WDL.
 
 ## Install
 

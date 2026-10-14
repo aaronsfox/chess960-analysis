@@ -22,5 +22,6 @@ Threads = 1
 Hash = 1024
 
 [optional_uci_options]
-# If absent, expected score is derived later from a fitted cp calibration.
+# PlentyChess currently reports centipawns only; the study uses them for
+# rankings and convergence, without a WDL calibration.
 UCI_ShowWDL = true

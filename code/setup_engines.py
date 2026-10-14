@@ -84,7 +84,7 @@ def cmd_check(args: argparse.Namespace) -> int:
                     print("   WARNING  : engine does not advertise UCI_Chess960")
                     ok = False
                 if "UCI_ShowWDL" not in engine.options:
-                    print("   note     : no UCI_ShowWDL; expected score will need a cp calibration")
+                    print("   note     : no UCI_ShowWDL; centipawns only (used for rankings and convergence)")
             finally:
                 engine.quit()
         except (EngineSetupError, chess.engine.EngineError, OSError) as exc:
