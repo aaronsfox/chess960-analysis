@@ -7,12 +7,12 @@ dir = "results/evaluate_sp"
 
 [budgets]
 # Node budgets per engine (folder name under engines/), on a log scale.
-# Alpha-beta engines stop at 1e8: on one Cascade Lake core Stockfish searches
-# ~0.5M nodes/s, so 1e9 would take ~35 min per position for little change in
-# the evaluation. `collect` keeps only the budgets listed here.
-stockfish   = [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000]
-caissa      = [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000]
-plentychess = [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000]
+# Alpha-beta engines go to 1e9. On one Cascade Lake core Stockfish searches
+# ~0.5M nodes/s, so the full ladder takes ~40 min per position (~35 min of it
+# at 1e9). `collect` keeps only the budgets listed here.
+stockfish   = [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000]
+caissa      = [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000]
+plentychess = [10_000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000]
 # An Lc0 node is a full network evaluation. Lc0 runs on a GPU; the pilot
 # confirms the top budget (1e6) fits the time available.
 lc0         = [100, 1_000, 10_000, 100_000, 1_000_000]

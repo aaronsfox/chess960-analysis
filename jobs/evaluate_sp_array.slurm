@@ -6,25 +6,26 @@
 #   sbatch --export=ALL,ENGINE=stockfish jobs/evaluate_sp_array.slurm
 #   sbatch --export=ALL,ENGINE=stockfish,MULTIPV=5 jobs/evaluate_sp_array.slurm
 #
-# With POSITIONS_PER_TASK=40 the 960 positions need array indices 0-23.
-# Stockfish takes ~4 minutes per position (budgets up to 1e8 at ~0.5M
-# nodes/s), so a task of 40 positions takes ~2.5 hours.
+# With POSITIONS_PER_TASK=10 the 960 positions need array indices 0-95.
+# Stockfish takes ~40 minutes per position (budgets up to 1e9 at ~0.5M
+# nodes/s), so a task of 10 positions takes ~7 hours. If you change
+# POSITIONS_PER_TASK, change --array to match (0 to 960/POSITIONS_PER_TASK - 1).
 # Finished positions are skipped, so resubmitting the same job resumes it.
 #
 # Adjust --time per engine once the pilot has measured search times.
 
 #SBATCH --job-name=c960-evaluate-sp
-#SBATCH --array=0-23
+#SBATCH --array=0-95
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=4G
-#SBATCH --time=06:00:00
+#SBATCH --time=12:00:00
 #SBATCH --output=logs/evaluate_sp_%x_%A_%a.out
 
 set -euo pipefail
 
 ENGINE="${ENGINE:?set ENGINE, e.g. --export=ALL,ENGINE=stockfish}"
 MULTIPV="${MULTIPV:-1}"
-POSITIONS_PER_TASK="${POSITIONS_PER_TASK:-40}"
+POSITIONS_PER_TASK="${POSITIONS_PER_TASK:-10}"
 
 # Run-time environment: any modules the engine binaries need (e.g. the GCC
 # they were built with, if they report GLIBCXX errors), and the project's
