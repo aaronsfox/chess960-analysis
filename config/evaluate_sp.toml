@@ -2,7 +2,8 @@
 # Every budget is a separate, fresh, single-threaded search.
 
 [output]
-# Relative to the repository root. Git ignores results/.
+# Relative to the repository root. Git tracks results/evaluate_sp/ (the
+# production data); other folders under results/ stay local.
 dir = "results/evaluate_sp"
 
 [budgets]

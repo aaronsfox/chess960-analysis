@@ -4,8 +4,11 @@ engines/*/networks/*
 !engines/*/bin/.gitkeep
 !engines/*/networks/.gitkeep
 
-# Results and logs (archived separately, e.g. on Zenodo)
-results/
+# Results: production outputs in results/evaluate_sp/ are committed so the
+# data is archived with the code. Anything else under results/ (test runs
+# with --output-dir results/test, etc.) stays local.
+results/*
+!results/evaluate_sp/
 logs/
 *.tmp
 
