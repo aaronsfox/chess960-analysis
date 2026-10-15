@@ -327,6 +327,7 @@ def build_position(engine: chess.engine.SimpleEngine, pos_id: int,
     n_gap = sum(abs(ln.white_loss - ln.black_loss) > s.max_side_loss_gap_cp for ln in pool.values())
     n_shift = sum(abs(ln.shift) > s.max_shift_cp for ln in pool.values())
     pool_first_moves = len({ln.first_move for ln in pool.values()})
+    pool_shifts = pd.Series([ln.shift for ln in pool.values()], dtype=float)
     used_fallback = False
     if not ok:
         # Nothing meets every limit: use the lines that drift least.
@@ -374,6 +375,8 @@ def build_position(engine: chess.engine.SimpleEngine, pos_id: int,
     info = {
         "walks": walks, "pool_size": len(pool), "pool_first_moves": pool_first_moves,
         "rejected_gap": n_gap, "rejected_shift": n_shift, "acceptable": len(ok),
+        "pool_shift_mean": round(float(pool_shifts.mean()), 1),
+        "pool_shift_sd": round(float(pool_shifts.std()), 1),
         "distinct_selected": len(seen), "first_moves": df["first_move"].nunique(),
         "fallback": used_fallback, "candidate_searches": n_searches,
         "check_searches": len(checks),
