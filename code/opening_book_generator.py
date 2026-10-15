@@ -20,7 +20,10 @@ towards either side:
    ``max_shift_cp`` of the starting position's.
 6. **Balanced selection.** From the acceptable lines, the book takes lines
    from different first moves in turn, choosing each time the line that keeps
-   the average shift (deeper check) closest to zero. Positions with fewer
+   the average shift in *expected score* (deeper check, Stockfish's WDL)
+   closest to zero. Expected score is the scale game results are on;
+   balancing centipawns instead can still tilt the expected result in
+   unbalanced positions, because the WDL curve is not straight. Positions with fewer
    good lines than needed repeat lines, so every position has the same number.
 
 Searches are fresh, single-threaded and node-limited and the random choices
@@ -127,6 +130,10 @@ def raw_path(out_dir: Path, engine_key: str, pos_id: int) -> Path:
     return out_dir / "raw" / engine_key / f"sp{pos_id:03d}.parquet"
 
 
+def pool_path(out_dir: Path, engine_key: str, pos_id: int) -> Path:
+    return out_dir / "raw" / engine_key / "pool" / f"sp{pos_id:03d}.parquet"
+
+
 # ---------------------------------------------------------------------------
 # Searching
 # ---------------------------------------------------------------------------
@@ -207,7 +214,8 @@ class Line:
     cp_end: int            # final evaluation from White's view (candidate search)
     white_loss: int
     black_loss: int
-    shift: float = 0.0     # final minus starting evaluation used for balancing
+    shift_cp: float = 0.0  # final minus starting evaluation, centipawns (deeper check)
+    shift: float = 0.0     # final minus starting expected score (deeper check), balanced to ~0
 
     @property
     def first_move(self) -> chess.Move:
@@ -255,7 +263,7 @@ def random_walks(root: chess.Board, search, s: BookSettings, rng: random.Random
 
 def acceptable(line: Line, s: BookSettings) -> bool:
     return (abs(line.white_loss - line.black_loss) <= s.max_side_loss_gap_cp
-            and abs(line.shift) <= s.max_shift_cp)
+            and abs(line.shift_cp) <= s.max_shift_cp)
 
 
 def select_lines(pool: list[Line], k: int, rng: random.Random) -> list[Line]:
@@ -290,7 +298,7 @@ def select_lines(pool: list[Line], k: int, rng: random.Random) -> list[Line]:
 
 
 def build_position(engine: chess.engine.SimpleEngine, pos_id: int,
-                   s: BookSettings) -> tuple[pd.DataFrame, dict[str, Any]]:
+                   s: BookSettings) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     position = get_position(pos_id)
     root = position.board()
     rng = random.Random(f"{s.seed}:{pos_id}")
@@ -319,20 +327,26 @@ def build_position(engine: chess.engine.SimpleEngine, pos_id: int,
         end_boards[key] = board
         if root_check:
             checks[key] = evaluate_exact(engine, board, s.check_nodes)
-            line.shift = checks[key]["cp"] - root_check["cp"]
+            line.shift_cp = checks[key]["cp"] - root_check["cp"]
+            # Balance on expected score, the scale game results are on. Equal
+            # centipawn drifts either way don't cancel in expected score when
+            # the position is unbalanced (the WDL curve is not straight), so
+            # balancing centipawns can still tilt the expected result.
+            e_shift = checks[key]["expected"] - root_check["expected"]
+            line.shift = e_shift if not math.isnan(e_shift) else line.shift_cp
         else:
-            line.shift = line.cp_end - cp_root
+            line.shift_cp = line.shift = line.cp_end - cp_root
 
     ok = [ln for ln in pool.values() if acceptable(ln, s)]
     n_gap = sum(abs(ln.white_loss - ln.black_loss) > s.max_side_loss_gap_cp for ln in pool.values())
-    n_shift = sum(abs(ln.shift) > s.max_shift_cp for ln in pool.values())
+    n_shift = sum(abs(ln.shift_cp) > s.max_shift_cp for ln in pool.values())
     pool_first_moves = len({ln.first_move for ln in pool.values()})
-    pool_shifts = pd.Series([ln.shift for ln in pool.values()], dtype=float)
+    pool_shifts = pd.Series([ln.shift_cp for ln in pool.values()], dtype=float)
     used_fallback = False
     if not ok:
         # Nothing meets every limit: use the lines that drift least.
         used_fallback = True
-        ok = sorted(pool.values(), key=lambda ln: abs(ln.shift))[:s.lines_per_position]
+        ok = sorted(pool.values(), key=lambda ln: abs(ln.shift_cp))[:s.lines_per_position]
     chosen = select_lines(ok, s.lines_per_position, rng)
     if not chosen:
         raise RuntimeError(f"position {pos_id}: no lines of {s.plies} plies found")
@@ -384,7 +398,35 @@ def build_position(engine: chess.engine.SimpleEngine, pos_id: int,
     }
     for key, value in info.items():
         df[key] = value
-    return df, info
+
+    # Every pool line with its checks, so the selection can be re-examined
+    # (or redone with other limits) without repeating any search.
+    n_chosen: dict[tuple[chess.Move, ...], int] = defaultdict(int)
+    for line in chosen:
+        n_chosen[line.moves] += 1
+    ok_keys = {ln.moves for ln in ok}
+    pool_rows = []
+    for key, line in pool.items():
+        chk = checks.get(key)
+        pool_rows.append({
+            "position_id": pos_id,
+            "moves_uci": " ".join(m.uci() for m in key),
+            "first_move": line.first_move.uci(),
+            "cp_end": line.cp_end,
+            "white_loss_cp": line.white_loss,
+            "black_loss_cp": line.black_loss,
+            "cp_end_check": chk["cp"] if chk else None,
+            "expected_end_check": chk["expected"] if chk else math.nan,
+            "shift_cp_check": line.shift_cp,
+            "shift_balance": line.shift,
+            "acceptable": key in ok_keys,
+            "times_selected": n_chosen.get(key, 0),
+        })
+    pool_df = pd.DataFrame(pool_rows)
+    if root_check:
+        pool_df["cp_root_check"] = root_check["cp"]
+        pool_df["expected_root_check"] = root_check["expected"]
+    return df, pool_df, info
 
 
 # ---------------------------------------------------------------------------
@@ -428,17 +470,20 @@ def cmd_build(args: argparse.Namespace) -> int:
     }
     try:
         for n, pos_id in enumerate(todo, 1):
-            df, info = build_position(engine, pos_id, s)
+            df, pool_df, info = build_position(engine, pos_id, s)
             for key, value in constant.items():
                 df[key] = value
             df["finished_utc"] = utc_now()
+            pool_df["run_id"] = run_id
+            write_parquet_atomic(pool_df, pool_path(out_dir, engine_key, pos_id))
             write_parquet_atomic(df, raw_path(out_dir, engine_key, pos_id))
             mean_shift = df["shift_cp_check"].mean() if "shift_cp_check" in df else df["shift_cp"].mean()
+            mean_e = df["shift_expected_check"].mean() if "shift_expected_check" in df else math.nan
             log.info("[%d/%d] sp%03d %s: %d distinct lines (pool %d, %d first moves), "
-                     "mean shift %+.1f cp%s, %d candidate searches, %.0fs",
+                     "mean shift %+.1f cp / %+.4f E%s, %d candidate searches, %.0fs",
                      n, len(todo), pos_id, get_position(pos_id).arrangement,
                      info["distinct_selected"], info["pool_size"], info["first_moves"],
-                     mean_shift, " (FALLBACK)" if info["fallback"] else "",
+                     mean_shift, mean_e, " (FALLBACK)" if info["fallback"] else "",
                      info["candidate_searches"], info["seconds"])
     finally:
         engine.quit()
@@ -529,6 +574,10 @@ def cmd_collect(args: argparse.Namespace) -> int:
     if "mean_shift_cp_check" in summary:
         log.info("deeper check, mean shift per position (cp): mean %+.2f, largest |shift| %.1f",
                  summary.mean_shift_cp_check.mean(), summary.mean_shift_cp_check.abs().max())
+        log.info("deeper check, mean shift per position (expected score, the balanced "
+                 "quantity): mean %+.4f, largest |shift| %.4f",
+                 summary.mean_shift_expected_check.mean(),
+                 summary.mean_shift_expected_check.abs().max())
     return 0
 
 

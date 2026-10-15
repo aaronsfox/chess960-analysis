@@ -16,7 +16,7 @@ SETTINGS = BookSettings(
 
 def line(first: str, second: str, shift: float, wl: int = 0, bl: int = 0) -> Line:
     moves = (chess.Move.from_uci(first), chess.Move.from_uci(second))
-    return Line(moves=moves, cp_end=0, white_loss=wl, black_loss=bl, shift=shift)
+    return Line(moves=moves, cp_end=0, white_loss=wl, black_loss=bl, shift_cp=shift, shift=shift)
 
 
 def test_acceptable_limits():

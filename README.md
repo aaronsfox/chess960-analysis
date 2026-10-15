@@ -153,7 +153,8 @@ How a position's lines are built:
    re-evaluated with a deeper search. Lines whose evaluation drifts more than
    50 cp from the starting position's are dropped.
 4. The book takes lines from different first moves in turn, each time
-   choosing the line that keeps the average drift closest to zero. Positions
+   choosing the line that keeps the average drift in expected score (from
+   Stockfish's WDL, the scale game results are on) closest to zero. Positions
    with fewer good lines than needed repeat lines, so every position has
    exactly 50.
 
@@ -174,6 +175,10 @@ On the cluster: `sbatch jobs/opening_book_array.slurm`, then `collect`. For the
 | --- | --- |
 | `opening_book_lines.parquet` / `.csv` | Every line: moves (UCI and SAN), final position, each side's loss, and the evaluation shift (shallow and deeper check) |
 | `opening_book_summary.csv` | Per position: distinct lines, first moves, mean shift, mean loss per side |
+
+`build` also keeps every candidate line it checked (`raw/<engine>/pool/`),
+with its evaluations and whether it was selected, so the selection can be
+examined or redone without repeating any search.
 | `opening_book.pgn` | The lines as games from each starting position, for fastchess |
 | `opening_book.epd` | The lines' final positions, one per line |
 
