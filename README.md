@@ -130,6 +130,48 @@ sbatch jobs/evaluate_sp_lc0_gpu.slurm                               # Lc0: 4 pro
 Both scripts activate the `chess960` conda environment; add modules the
 engines need at run time with `--export=ALL,ENGINE=...,MODULES="..."`.
 
+## Self-play opening book (opening_book_generator.py)
+
+Self-play games start from short opening lines so that games vary, as in
+real play, where players choose between several good moves. The book holds
+50 lines of 6 plies (three moves each) for every starting position, built
+with Stockfish and shared by every self-play engine, so differences between
+engines can't come from the openings. Settings are in
+`config/opening_book.toml`.
+
+How a position's lines are built:
+
+1. At each ply, a MultiPV search lists the moves within 20 cp of the best
+   move; lines are built by choosing uniformly among them (seeded random
+   walks), so they spread over different first moves.
+2. Both sides face the same limits: each side's total loss over its own moves
+   is capped, and White's and Black's totals must be close.
+3. Every candidate line's final position, and the starting position, are
+   re-evaluated with a deeper search. Lines whose evaluation drifts more than
+   25 cp from the starting position's are dropped.
+4. The book takes lines from different first moves in turn, each time
+   choosing the line that keeps the average drift closest to zero. Positions
+   with fewer good lines than needed repeat lines, so every position has
+   exactly 50.
+
+Searches are single-threaded and node-limited and the random choices are
+seeded per position, so the same engine build regenerates the identical book.
+
+```bash
+python code/opening_book_generator.py build --positions 518 --output-dir results/test_book
+python code/opening_book_generator.py collect --output-dir results/test_book
+```
+
+On the cluster: `sbatch jobs/opening_book_array.slurm`, then `collect`.
+`collect` writes to `results/opening_book/book/`:
+
+| File | Contents |
+| --- | --- |
+| `opening_book_lines.parquet` / `.csv` | Every line: moves (UCI and SAN), final position, each side's loss, and the evaluation shift (shallow and deeper check) |
+| `opening_book_summary.csv` | Per position: distinct lines, first moves, mean shift, mean loss per side |
+| `opening_book.pgn` | The lines as games from each starting position, for fastchess |
+| `opening_book.epd` | The lines' final positions, one per line |
+
 ## Positions
 
 Positions use Scharnagl numbering 0–959, with #518 the standard starting

@@ -1,0 +1,565 @@
+"""opening_book_generator: build the balanced opening book for self-play.
+
+For each Chess960 starting position the book holds a fixed number of short
+opening lines (default 50 lines of 6 plies, three moves each). The lines give
+self-play games varied, realistic openings without tilting the position
+towards either side:
+
+1. **Near-best moves only.** At each ply a MultiPV search lists the moves
+   within ``move_margin_cp`` of the best move.
+2. **Random walks.** Lines are built by choosing uniformly among those moves,
+   so they spread over different first moves instead of following one line.
+3. **Equal treatment of both sides.** Each side's total loss over its own
+   moves is capped (``max_side_loss_cp``), and White's and Black's totals must
+   be close (``max_side_loss_gap_cp``).
+4. **Deeper check.** Every line in the pool has its final position, and
+   the starting position, re-evaluated with a deeper single-line search
+   (``check_nodes``). The shallow MultiPV scores are good enough to pick
+   plausible moves but too noisy to balance on.
+5. **No drift.** A line's final evaluation (deeper check) must be within
+   ``max_shift_cp`` of the starting position's.
+6. **Balanced selection.** From the acceptable lines, the book takes lines
+   from different first moves in turn, choosing each time the line that keeps
+   the average shift (deeper check) closest to zero. Positions with fewer
+   good lines than needed repeat lines, so every position has the same number.
+
+Searches are fresh, single-threaded and node-limited and the random choices
+are seeded per position, so the same engine build regenerates the identical
+book.
+
+Subcommands
+-----------
+build    Generate lines for positions (one Parquet file per position;
+         resumable: finished positions are skipped).
+collect  Combine the per-position files into the book: a table of every
+         line, a per-position summary, and PGN and EPD files for fastchess.
+
+Examples
+--------
+    python code/opening_book_generator.py build --positions 0-959
+    python code/opening_book_generator.py build --positions 518 --output-dir results/test_book
+    python code/opening_book_generator.py collect
+"""
+
+from __future__ import annotations
+
+import argparse
+import dataclasses
+import json
+import logging
+import math
+import random
+import sys
+import time
+import uuid
+from collections import defaultdict
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import chess
+import chess.engine
+import chess.pgn
+import pandas as pd
+
+from utils import (
+    CONFIG_DIR,
+    REPO_ROOT,
+    EngineSetupError,
+    expected_score_from_wdl,
+    get_position,
+    load_engine_config,
+    load_toml,
+    open_engine,
+    parse_position_spec,
+    platform_info,
+    setup_logging,
+    utc_now,
+    write_parquet_atomic,
+)
+
+log = logging.getLogger("chess960.opening_book")
+
+DEFAULT_CONFIG = CONFIG_DIR / "opening_book.toml"
+MATE_CP = 100_000
+
+
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class BookSettings:
+    plies: int
+    lines_per_position: int
+    seed: int
+    candidate_nodes: int
+    multipv: int
+    check_nodes: int
+    move_margin_cp: int
+    max_side_loss_cp: int
+    max_side_loss_gap_cp: int
+    max_shift_cp: int
+    pool_factor: float
+    max_walks: int
+
+    @classmethod
+    def from_config(cls, config: dict[str, Any]) -> "BookSettings":
+        b, s, lim, smp = config["book"], config["search"], config["limits"], config["sampling"]
+        return cls(
+            plies=int(b["plies"]), lines_per_position=int(b["lines_per_position"]),
+            seed=int(b["seed"]), candidate_nodes=int(s["candidate_nodes"]),
+            multipv=int(s["multipv"]), check_nodes=int(s.get("check_nodes", 0)),
+            move_margin_cp=int(lim["move_margin_cp"]),
+            max_side_loss_cp=int(lim["max_side_loss_cp"]),
+            max_side_loss_gap_cp=int(lim["max_side_loss_gap_cp"]),
+            max_shift_cp=int(lim["max_shift_cp"]),
+            pool_factor=float(smp["pool_factor"]), max_walks=int(smp["max_walks"]),
+        )
+
+
+def output_dir(config: dict[str, Any], override: str | None) -> Path:
+    path = Path(override or config["output"]["dir"])
+    return path if path.is_absolute() else REPO_ROOT / path
+
+
+def raw_path(out_dir: Path, engine_key: str, pos_id: int) -> Path:
+    return out_dir / "raw" / engine_key / f"sp{pos_id:03d}.parquet"
+
+
+# ---------------------------------------------------------------------------
+# Searching
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Candidate:
+    move: chess.Move
+    cp_mover: int      # score after the move, from the moving side's view
+    cp_white: int      # the same score from White's view
+
+
+def _cp(score: chess.engine.PovScore, color: chess.Color) -> int:
+    return score.pov(color).score(mate_score=MATE_CP)
+
+
+def candidate_moves(engine: chess.engine.SimpleEngine, board: chess.Board,
+                    nodes: int, multipv: int) -> list[Candidate]:
+    """Fresh MultiPV search; returns the moves best first.
+
+    A node-limited search can stop partway through a depth, leaving the line
+    being searched with an aspiration-window bound instead of an exact score.
+    Such a line's score is replaced by that move's last exact score.
+    """
+    latest: dict[int, chess.engine.InfoDict] = {}
+    last_exact: dict[chess.Move, chess.engine.PovScore] = {}
+    with engine.analysis(board, chess.engine.Limit(nodes=nodes), multipv=multipv,
+                         game=object()) as analysis:
+        for info in analysis:
+            if "score" not in info or not info.get("pv"):
+                continue
+            latest[info.get("multipv", 1)] = info
+            if not (info.get("lowerbound") or info.get("upperbound")):
+                last_exact[info["pv"][0]] = info["score"]
+        analysis.wait()
+    out: dict[chess.Move, Candidate] = {}
+    for info in latest.values():
+        move = info["pv"][0]
+        score = info["score"]
+        if info.get("lowerbound") or info.get("upperbound"):
+            score = last_exact.get(move, score)
+        out[move] = Candidate(move, _cp(score, board.turn), _cp(score, chess.WHITE))
+    if not out:
+        raise RuntimeError(f"no scored lines for {board.fen()}")
+    return sorted(out.values(), key=lambda c: -c.cp_mover)
+
+
+def evaluate_exact(engine: chess.engine.SimpleEngine, board: chess.Board,
+                   nodes: int) -> dict[str, Any]:
+    """Single-line search; returns the last exact score (and WDL) from White's view."""
+    last: chess.engine.InfoDict | None = None
+    exact: chess.engine.InfoDict | None = None
+    with engine.analysis(board, chess.engine.Limit(nodes=nodes), game=object()) as analysis:
+        for info in analysis:
+            if "score" not in info:
+                continue
+            last = info
+            if not (info.get("lowerbound") or info.get("upperbound")):
+                exact = info
+        analysis.wait()
+    info = exact or last
+    if info is None:
+        raise RuntimeError(f"no scored lines for {board.fen()}")
+    wdl = info.get("wdl")
+    e = math.nan
+    if wdl is not None:
+        w = wdl.white()
+        e = expected_score_from_wdl(w.wins, w.draws, w.losses)
+    return {"cp": _cp(info["score"], chess.WHITE), "expected": e, "depth": info.get("depth")}
+
+
+# ---------------------------------------------------------------------------
+# Building lines
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Line:
+    moves: tuple[chess.Move, ...]
+    cp_end: int            # final evaluation from White's view (candidate search)
+    white_loss: int
+    black_loss: int
+    shift: float = 0.0     # final minus starting evaluation used for balancing
+
+    @property
+    def first_move(self) -> chess.Move:
+        return self.moves[0]
+
+
+def random_walks(root: chess.Board, search, s: BookSettings, rng: random.Random
+                 ) -> tuple[int, dict[tuple[chess.Move, ...], Line], int]:
+    """Build distinct lines by random walks from ``root``.
+
+    ``search(board)`` returns the candidate moves (cached by the caller).
+    Returns the root evaluation (White's view), the distinct lines, and the
+    number of walks made.
+    """
+    root_cands = search(root)
+    cp_root = root_cands[0].cp_white
+    target = math.ceil(s.pool_factor * s.lines_per_position)
+    pool: dict[tuple[chess.Move, ...], Line] = {}
+    walks = 0
+    while len(pool) < target and walks < s.max_walks:
+        walks += 1
+        board = root.copy(stack=False)
+        loss = {chess.WHITE: 0, chess.BLACK: 0}
+        moves: list[chess.Move] = []
+        cp_end = cp_root
+        for _ in range(s.plies):
+            if board.is_game_over():
+                break
+            cands = search(board)
+            best = cands[0].cp_mover
+            side = board.turn
+            options = [c for c in cands
+                       if best - c.cp_mover <= s.move_margin_cp
+                       and loss[side] + best - c.cp_mover <= s.max_side_loss_cp]
+            choice = rng.choice(options) if options else cands[0]
+            loss[side] += best - choice.cp_mover
+            moves.append(choice.move)
+            cp_end = choice.cp_white
+            board.push(choice.move)
+        key = tuple(moves)
+        if len(key) == s.plies and key not in pool:
+            pool[key] = Line(key, cp_end, loss[chess.WHITE], loss[chess.BLACK])
+    return cp_root, pool, walks
+
+
+def acceptable(line: Line, s: BookSettings) -> bool:
+    return (abs(line.white_loss - line.black_loss) <= s.max_side_loss_gap_cp
+            and abs(line.shift) <= s.max_shift_cp)
+
+
+def select_lines(pool: list[Line], k: int, rng: random.Random) -> list[Line]:
+    """Choose ``k`` lines: distinct first moves in turn, each time the line that
+    keeps the mean ``shift`` closest to zero. If the pool has fewer than ``k``
+    lines, all are used and then repeated in the same order."""
+    if not pool:
+        return []
+    groups: dict[chess.Move, list[Line]] = defaultdict(list)
+    for line in pool:
+        groups[line.first_move].append(line)
+    order = sorted(groups, key=lambda m: m.uci())
+    rng.shuffle(order)
+    chosen: list[Line] = []
+    total = 0
+    while len(chosen) < min(k, len(pool)):
+        for first in order:
+            if len(chosen) >= min(k, len(pool)) or not groups[first]:
+                continue
+            cands = groups[first]
+            rng.shuffle(cands)  # random tie-break
+            best = min(cands, key=lambda ln: abs(total + ln.shift))
+            cands.remove(best)
+            chosen.append(best)
+            total += best.shift
+    distinct = len(chosen)
+    i = 0
+    while len(chosen) < k:
+        chosen.append(chosen[i % distinct])
+        i += 1
+    return chosen
+
+
+def build_position(engine: chess.engine.SimpleEngine, pos_id: int,
+                   s: BookSettings) -> tuple[pd.DataFrame, dict[str, Any]]:
+    position = get_position(pos_id)
+    root = position.board()
+    rng = random.Random(f"{s.seed}:{pos_id}")
+    cache: dict[str, list[Candidate]] = {}
+    n_searches = 0
+
+    def search(board: chess.Board) -> list[Candidate]:
+        nonlocal n_searches
+        key = board.fen()
+        if key not in cache:
+            cache[key] = candidate_moves(engine, board, s.candidate_nodes, s.multipv)
+            n_searches += 1
+        return cache[key]
+
+    start = time.perf_counter()
+    cp_root, pool, walks = random_walks(root, search, s, rng)
+
+    # Deeper check of the starting position and every pool line's final position.
+    root_check = evaluate_exact(engine, root, s.check_nodes) if s.check_nodes else None
+    end_boards: dict[tuple[chess.Move, ...], chess.Board] = {}
+    checks: dict[tuple[chess.Move, ...], dict[str, Any]] = {}
+    for key, line in pool.items():
+        board = root.copy(stack=False)
+        for move in key:
+            board.push(move)
+        end_boards[key] = board
+        if root_check:
+            checks[key] = evaluate_exact(engine, board, s.check_nodes)
+            line.shift = checks[key]["cp"] - root_check["cp"]
+        else:
+            line.shift = line.cp_end - cp_root
+
+    ok = [ln for ln in pool.values() if acceptable(ln, s)]
+    n_gap = sum(abs(ln.white_loss - ln.black_loss) > s.max_side_loss_gap_cp for ln in pool.values())
+    n_shift = sum(abs(ln.shift) > s.max_shift_cp for ln in pool.values())
+    pool_first_moves = len({ln.first_move for ln in pool.values()})
+    used_fallback = False
+    if not ok:
+        # Nothing meets every limit: use the lines that drift least.
+        used_fallback = True
+        ok = sorted(pool.values(), key=lambda ln: abs(ln.shift))[:s.lines_per_position]
+    chosen = select_lines(ok, s.lines_per_position, rng)
+    if not chosen:
+        raise RuntimeError(f"position {pos_id}: no lines of {s.plies} plies found")
+
+    rows = []
+    seen: set[tuple[chess.Move, ...]] = set()
+    for idx, line in enumerate(chosen):
+        board = root.copy(stack=False)
+        san = []
+        for move in line.moves:
+            san.append(board.san(move))
+            board.push(move)
+        chk = checks.get(line.moves)
+        rows.append({
+            "position_id": pos_id,
+            "arrangement": position.arrangement,
+            "start_fen": position.fen,
+            "line_index": idx,
+            "repeat": line.moves in seen,
+            "moves_uci": " ".join(m.uci() for m in line.moves),
+            "moves_san": " ".join(san),
+            "first_move": line.first_move.uci(),
+            "end_fen": end_boards[line.moves].fen(shredder=True),
+            "cp_root": cp_root,
+            "cp_end": line.cp_end,
+            "shift_cp": line.cp_end - cp_root,
+            "white_loss_cp": line.white_loss,
+            "black_loss_cp": line.black_loss,
+            "cp_root_check": root_check["cp"] if root_check else None,
+            "expected_root_check": root_check["expected"] if root_check else math.nan,
+            "cp_end_check": chk["cp"] if chk else None,
+            "expected_end_check": chk["expected"] if chk else math.nan,
+            "depth_end_check": chk["depth"] if chk else None,
+        })
+        seen.add(line.moves)
+    df = pd.DataFrame(rows)
+    if root_check:
+        df["shift_cp_check"] = df["cp_end_check"] - df["cp_root_check"]
+        df["shift_expected_check"] = df["expected_end_check"] - df["expected_root_check"]
+    info = {
+        "walks": walks, "pool_size": len(pool), "pool_first_moves": pool_first_moves,
+        "rejected_gap": n_gap, "rejected_shift": n_shift, "acceptable": len(ok),
+        "distinct_selected": len(seen), "first_moves": df["first_move"].nunique(),
+        "fallback": used_fallback, "candidate_searches": n_searches,
+        "check_searches": len(checks),
+        "seconds": round(time.perf_counter() - start, 1),
+    }
+    for key, value in info.items():
+        df[key] = value
+    return df, info
+
+
+# ---------------------------------------------------------------------------
+# Subcommands
+# ---------------------------------------------------------------------------
+
+def cmd_build(args: argparse.Namespace) -> int:
+    config = load_toml(Path(args.config))
+    s = BookSettings.from_config(config)
+    out_dir = output_dir(config, args.output_dir)
+    engine_key = config["book"]["engine"]
+    cfg = load_engine_config(engine_key)
+    overrides = config.get("uci_overrides", {})
+    cfg = dataclasses.replace(cfg, uci_options={**cfg.uci_options, **overrides})
+
+    pos_ids = parse_position_spec(args.positions)
+    todo = [p for p in pos_ids if args.overwrite or not raw_path(out_dir, engine_key, p).exists()]
+    log.info("book engine %s %s | %d plies, %d lines | %d positions (%d already done)",
+             cfg.name, cfg.version, s.plies, s.lines_per_position, len(todo),
+             len(pos_ids) - len(todo))
+    if not todo:
+        return 0
+    try:
+        engine, meta = open_engine(cfg, strict_lock=not args.allow_unlocked)
+    except EngineSetupError as exc:
+        log.error("%s", exc)
+        return 2
+
+    run_id = uuid.uuid4().hex[:12]
+    run_meta = {"run_id": run_id, **platform_info()}
+    meta_path = out_dir / "runs" / f"{run_id}.json"
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(json.dumps({**meta, **run_meta, "settings": dataclasses.asdict(s),
+                                     "positions": todo, "started": utc_now()},
+                                    indent=2, default=str))
+    constant = {
+        "engine": meta["engine"], "engine_version": meta["engine_version"],
+        "engine_id_name": meta["engine_id_name"], "binary_sha256": meta["binary_sha256"],
+        "settings_json": json.dumps(dataclasses.asdict(s), sort_keys=True),
+        "run_id": run_id, "hostname": run_meta["hostname"], "cpu": run_meta["cpu"],
+    }
+    try:
+        for n, pos_id in enumerate(todo, 1):
+            df, info = build_position(engine, pos_id, s)
+            for key, value in constant.items():
+                df[key] = value
+            df["finished_utc"] = utc_now()
+            write_parquet_atomic(df, raw_path(out_dir, engine_key, pos_id))
+            mean_shift = df["shift_cp_check"].mean() if "shift_cp_check" in df else df["shift_cp"].mean()
+            log.info("[%d/%d] sp%03d %s: %d distinct lines (pool %d, %d first moves), "
+                     "mean shift %+.1f cp%s, %d candidate searches, %.0fs",
+                     n, len(todo), pos_id, get_position(pos_id).arrangement,
+                     info["distinct_selected"], info["pool_size"], info["first_moves"],
+                     mean_shift, " (FALLBACK)" if info["fallback"] else "",
+                     info["candidate_searches"], info["seconds"])
+    finally:
+        engine.quit()
+    log.info("done")
+    return 0
+
+
+def write_pgn(lines: pd.DataFrame, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        for row in lines.itertuples(index=False):
+            board = chess.Board(row.start_fen, chess960=True)
+            game = chess.pgn.Game()
+            game.setup(board)
+            game.headers["Event"] = "Chess960 self-play opening book"
+            game.headers["Variant"] = "Chess960"
+            game.headers["PositionId"] = str(row.position_id)
+            game.headers["LineIndex"] = str(row.line_index)
+            game.headers["Result"] = "*"
+            node = game
+            for uci in row.moves_uci.split():
+                node = node.add_variation(chess.Move.from_uci(uci))
+            print(game, file=fh, end="\n\n")
+    tmp.replace(path)
+
+
+def write_epd(lines: pd.DataFrame, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        for row in lines.itertuples(index=False):
+            board = chess.Board(row.end_fen, chess960=True)
+            fh.write(board.epd(shredder=True, id=f"sp{row.position_id:03d}_l{row.line_index:02d}") + "\n")
+    tmp.replace(path)
+
+
+def cmd_collect(args: argparse.Namespace) -> int:
+    config = load_toml(Path(args.config))
+    out_dir = output_dir(config, args.output_dir)
+    engine_key = config["book"]["engine"]
+    files = sorted((out_dir / "raw" / engine_key).glob("sp*.parquet"))
+    if not files:
+        log.error("no book files in %s", out_dir / "raw" / engine_key)
+        return 1
+    lines = pd.concat((pd.read_parquet(f) for f in files), ignore_index=True)
+    lines = lines.sort_values(["position_id", "line_index"]).reset_index(drop=True)
+    k = int(config["book"]["lines_per_position"])
+    counts = lines.groupby("position_id").size()
+    if (counts != k).any():
+        log.warning("positions without exactly %d lines: %s", k, counts[counts != k].to_dict())
+
+    agg = {
+        "arrangement": ("arrangement", "first"),
+        "lines": ("line_index", "size"),
+        "distinct_lines": ("distinct_selected", "first"),
+        "pool_size": ("pool_size", "first"),
+        "first_moves": ("first_moves", "first"),
+        "fallback": ("fallback", "first"),
+        "cp_root": ("cp_root", "first"),
+        "mean_shift_cp": ("shift_cp", "mean"),
+        "mean_white_loss_cp": ("white_loss_cp", "mean"),
+        "mean_black_loss_cp": ("black_loss_cp", "mean"),
+        "seconds": ("seconds", "first"),
+    }
+    if "shift_cp_check" in lines:
+        agg.update({
+            "cp_root_check": ("cp_root_check", "first"),
+            "mean_shift_cp_check": ("shift_cp_check", "mean"),
+            "sd_shift_cp_check": ("shift_cp_check", "std"),
+            "expected_root_check": ("expected_root_check", "first"),
+            "mean_shift_expected_check": ("shift_expected_check", "mean"),
+        })
+    summary = lines.groupby("position_id").agg(**agg).reset_index()
+
+    book_dir = out_dir / "book"
+    write_parquet_atomic(lines, book_dir / "opening_book_lines.parquet")
+    lines.drop(columns=["settings_json"]).to_csv(book_dir / "opening_book_lines.csv", index=False)
+    summary.to_csv(book_dir / "opening_book_summary.csv", index=False)
+    write_pgn(lines, book_dir / "opening_book.pgn")
+    write_epd(lines, book_dir / "opening_book.epd")
+    log.info("wrote %s: %d positions, %d lines", book_dir, len(summary), len(lines))
+    log.info("distinct lines per position: min %d, median %d; positions with repeats: %d; "
+             "fallbacks: %d", summary.distinct_lines.min(), summary.distinct_lines.median(),
+             int((summary.distinct_lines < k).sum()), int(summary.fallback.sum()))
+    log.info("mean shift per position (cp): mean %+.2f, largest |shift| %.1f",
+             summary.mean_shift_cp.mean(), summary.mean_shift_cp.abs().max())
+    if "mean_shift_cp_check" in summary:
+        log.info("deeper check, mean shift per position (cp): mean %+.2f, largest |shift| %.1f",
+                 summary.mean_shift_cp_check.mean(), summary.mean_shift_cp_check.abs().max())
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def build_parser() -> argparse.ArgumentParser:
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--config", default=str(DEFAULT_CONFIG))
+    common.add_argument("--output-dir", help="override [output] dir in the config")
+    common.add_argument("-v", "--verbose", action="store_true")
+
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("build", parents=[common], help="generate lines for positions")
+    p.add_argument("--positions", default="0-959")
+    p.add_argument("--overwrite", action="store_true", help="redo finished positions")
+    p.add_argument("--allow-unlocked", action="store_true",
+                   help="run without a lock-file entry (testing only)")
+    p.set_defaults(func=cmd_build)
+
+    p = sub.add_parser("collect", parents=[common], help="combine into the book files")
+    p.set_defaults(func=cmd_collect)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    setup_logging(args.verbose)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
