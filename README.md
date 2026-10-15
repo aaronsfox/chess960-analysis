@@ -109,8 +109,15 @@ positions already done, so an interrupted run resumes where it stopped.
 | File | Contents |
 | --- | --- |
 | `evaluate_sp_info_lines.parquet` | Every UCI info line from every search |
-| `evaluate_sp_final.parquet` / `.csv` | One row per search and principal variation: final score, WDL, expected score, Elo-equivalent |
+| `evaluate_sp_final.parquet` / `.csv` | One row per search and principal variation: the evaluation (score, WDL, expected score, Elo-equivalent), best move, and the search's last line in `last_*` columns |
 | `evaluate_sp_convergence.csv` | Per engine and position: top-budget values, total variation and tail drift across budgets |
+
+A search's evaluation is its last line with an **exact** score. When the node
+limit stops a search partway through a depth, the last line is often an
+aspiration-window bound (the true score is only known to be above or below
+it), so it isn't used. `eval_source` is `last_exact` normally, or
+`last_line_bound` if a search printed no exact line. The best move is always
+the engine's own `bestmove`.
 
 On the cluster (create `logs/` first):
 

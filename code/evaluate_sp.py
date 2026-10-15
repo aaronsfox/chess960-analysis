@@ -9,7 +9,13 @@ Subcommands
 run      Evaluate positions with one engine; writes one Parquet file per
          position (resumable: finished positions are skipped).
 collect  Combine the per-position files into tidy tables: every info line,
-         one final row per search, and convergence metrics per position.
+         one evaluation row per search, and convergence metrics per position.
+
+The evaluation of a search is its last line with an exact score. When the
+node limit stops a search partway through a depth, the engine's last line is
+often an aspiration-window bound (the true score is only known to be above or
+below it), so it isn't used as the evaluation. The best move is always the
+engine's own `bestmove`, and the last line is kept alongside as `last_*`.
 
 Examples
 --------
@@ -121,6 +127,14 @@ def info_to_row(info: chess.engine.InfoDict) -> dict[str, Any]:
     }
 
 
+def evaluation_row(search_rows: list[dict[str, Any]], pv_index: int = 1) -> dict[str, Any]:
+    """The line that gives a search's evaluation for one principal variation:
+    the last exact-score line, or the last line if none is exact."""
+    lines = [r for r in search_rows if r["multipv_index"] == pv_index]
+    exact = [r for r in lines if r["bound"] == "exact"]
+    return (exact or lines)[-1]
+
+
 def search(engine: chess.engine.SimpleEngine, board: chess.Board, nodes: int,
            multipv: int) -> tuple[list[dict[str, Any]], str | None, float]:
     """Run one fresh node-limited search and return every scored info line.
@@ -143,7 +157,9 @@ def search(engine: chess.engine.SimpleEngine, board: chess.Board, nodes: int,
         best = analysis.wait()
     wall = time.perf_counter() - start
 
-    # Flag the last line reported for each principal variation: the search result.
+    # Flag the last line reported for each principal variation. It may be an
+    # aspiration-window bound; `collect` takes the evaluation from the last
+    # exact line instead (see evaluation_row).
     last: dict[int, int] = {}
     for i, row in enumerate(rows):
         last[row["multipv_index"]] = i
@@ -166,7 +182,7 @@ def evaluate_position(engine: chess.engine.SimpleEngine, pos_id: int,
         for row in search_rows:
             row.update(budget_nodes=budget, bestmove=bestmove, search_wall_s=wall)
         rows.extend(search_rows)
-        final = [r for r in search_rows if r["is_final"] and r["multipv_index"] == 1][0]
+        final = evaluation_row(search_rows)
         log.info("  sp%03d  %11d nodes  depth %3s  cp %6s  E %s  %.1fs",
                  pos_id, budget, final["depth"], final["cp_white"],
                  "  n/a" if math.isnan(final["expected_score"]) else f"{final['expected_score']:.4f}",
@@ -243,6 +259,42 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+SEARCH_KEYS = ["engine", "position_id", "multipv_setting", "budget_nodes", "multipv_index"]
+
+SUMMARY_COLS = [
+    "engine", "engine_version", "position_id", "arrangement", "fen",
+    "multipv_setting", "multipv_index", "budget_nodes", "depth", "seldepth",
+    "nodes", "time_s", "bound", "cp_white", "mate_white", "wdl_w", "wdl_d", "wdl_l",
+    "expected_score", "pv", "bestmove", "search_wall_s",
+]
+
+LAST_COLS = ["depth", "nodes", "bound", "cp_white", "mate_white", "expected_score"]
+
+
+def evaluation_table(raw: pd.DataFrame) -> pd.DataFrame:
+    """One row per search and principal variation: the evaluation line.
+
+    The evaluation is the last line with an exact score; if a search has none,
+    its last line is used and ``eval_source`` says so. The search's actual last
+    line (often a bound) is kept in the ``last_*`` columns.
+    """
+    raw = raw.reset_index(drop=True)
+    raw["_order"] = range(len(raw))   # lines are stored in the order printed
+    last = raw.loc[raw["is_final"], SEARCH_KEYS + LAST_COLS]
+    last = last.rename(columns={c: f"last_{c}" for c in LAST_COLS})
+
+    exact = raw[raw["bound"] == "exact"].sort_values("_order")
+    chosen = exact.groupby(SEARCH_KEYS, sort=False).tail(1).assign(eval_source="last_exact")
+    have = chosen.set_index(SEARCH_KEYS).index
+    rest = raw.loc[raw["is_final"]]
+    rest = rest[~rest.set_index(SEARCH_KEYS).index.isin(have)].assign(eval_source="last_line_bound")
+
+    summary = pd.concat([chosen, rest])[SUMMARY_COLS + ["eval_source"]]
+    summary = summary.merge(last, on=SEARCH_KEYS, how="left")
+    summary["elo_equivalent"] = summary["expected_score"].map(elo_from_expected)
+    return summary.sort_values(SEARCH_KEYS).reset_index(drop=True)
+
+
 def convergence_table(summary: pd.DataFrame) -> pd.DataFrame:
     """Per engine and position: values at the top budget plus convergence
     measures across the budget ladder (MultiPV = 1 searches only)."""
@@ -297,14 +349,11 @@ def cmd_collect(args: argparse.Namespace) -> int:
                 log.info("ignoring %d info lines for %s at %d nodes (not in config)", n, engine, budget)
         raw = raw.loc[keep].reset_index(drop=True)
 
-    summary_cols = [
-        "engine", "engine_version", "position_id", "arrangement", "fen",
-        "multipv_setting", "multipv_index", "budget_nodes", "depth", "seldepth",
-        "nodes", "time_s", "bound", "cp_white", "mate_white", "wdl_w", "wdl_d", "wdl_l",
-        "expected_score", "pv", "bestmove", "search_wall_s",
-    ]
-    summary = raw.loc[raw["is_final"], summary_cols].reset_index(drop=True)
-    summary["elo_equivalent"] = summary["expected_score"].map(elo_from_expected)
+    summary = evaluation_table(raw)
+    n_fallback = int((summary["eval_source"] != "last_exact").sum())
+    if n_fallback:
+        log.warning("%d searches have no exact-score line; their evaluation is the "
+                    "last (bound) line (eval_source = last_line_bound)", n_fallback)
     convergence = convergence_table(summary)
 
     tables = out_dir / "tables"
