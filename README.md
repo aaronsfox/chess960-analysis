@@ -124,7 +124,7 @@ On the cluster (create `logs/` first):
 ```bash
 mkdir -p logs
 sbatch --export=ALL,ENGINE=stockfish jobs/evaluate_sp_array.slurm   # CPU engines
-sbatch jobs/evaluate_sp_lc0_gpu.slurm                               # Lc0: 4 processes per GPU, 8 GPUs
+sbatch jobs/evaluate_sp_lc0_gpu.slurm                               # Lc0: 4 processes per GPU, 24 short tasks
 ```
 
 Both scripts activate the `chess960` conda environment; add modules the

@@ -4,7 +4,7 @@
 #
 # Submit from the repository root (create logs/ first):
 #   sbatch jobs/evaluate_sp_lc0_gpu.slurm
-#   sbatch --array=0-7%4 jobs/evaluate_sp_lc0_gpu.slurm      # at most 4 GPUs at once
+#   sbatch --array=0-23%4 jobs/evaluate_sp_lc0_gpu.slurm     # at most 4 GPUs at once
 #
 # One single-threaded Lc0 search keeps an A100 mostly idle (~5k nodes/s), so
 # each task runs PROCS_PER_GPU independent Lc0 processes on its GPU, each on
@@ -13,26 +13,28 @@
 # processes share the GPU; only the recorded times (time_s, nps,
 # search_wall_s) do.
 #
-# Defaults: POSITIONS_PER_TASK=120 with PROCS_PER_GPU=4, so array 0-7 covers
-# the 960 positions with 8 GPUs, 30 positions per process. At ~3.5 min per
-# position on an unshared A100 that is ~2 hours per task if sharing costs
-# nothing, and longer if the processes slow each other down. If you change
-# POSITIONS_PER_TASK, change --array to match (0 to 960/POSITIONS_PER_TASK - 1).
+# Defaults: POSITIONS_PER_TASK=40 with PROCS_PER_GPU=4, so array 0-23 covers
+# the 960 positions, 10 positions per process. At ~3.5 min per position on an
+# unshared A100 a task takes ~35 min if sharing costs nothing, and up to ~2.5
+# hours if the processes slow each other down. The short tasks and 4-hour
+# limit let SLURM's backfill scheduler start tasks in gaps on a busy GPU
+# partition. If you change POSITIONS_PER_TASK, change --array to match
+# (0 to 960/POSITIONS_PER_TASK - 1).
 # Finished positions are skipped, so resubmitting the same job resumes it.
 
 #SBATCH --job-name=c960-evaluate-sp-lc0
 #SBATCH --partition=dgx
 #SBATCH --gres=gpu:1
-#SBATCH --array=0-7
+#SBATCH --array=0-23
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --time=12:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=logs/evaluate_sp_%x_%A_%a.out
 
 set -euo pipefail
 
 ENGINE="${ENGINE:-lc0}"
-POSITIONS_PER_TASK="${POSITIONS_PER_TASK:-120}"
+POSITIONS_PER_TASK="${POSITIONS_PER_TASK:-40}"
 PROCS_PER_GPU="${PROCS_PER_GPU:-4}"
 
 # Run-time environment: the CUDA libraries Lc0 was built against, and the
