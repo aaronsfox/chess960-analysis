@@ -1,8 +1,37 @@
 # Pilot positions (Scharnagl ids). Use with --positions @config/pilot_positions.txt
 #
-# Placeholder until the pilot set is finalised: the plan calls for ~30
-# positions stratified on published evaluations (8 high, 8 low, 10 middle),
-# plus #518 and a few mirror partners.
-518   # standard chess, RNBQKBNR
-80    # BBNNRKRQ: highest evaluation in the Sesse and Kisir studies
-644   # RBBNKRQN: lowest evaluation in the Kisir study
+# 30 positions stratified on the Stockfish 19 evaluations at 1e9 nodes
+# (results/evaluate_sp): the 8 highest and 8 lowest expected scores, 10
+# spread evenly from the 25th to the 75th percentile, plus #518 (standard
+# chess), its mirror, and the mirrors of the highest and lowest positions.
+# Values shown: expected score for White and centipawns at 1e9 nodes.
+868   # high   QBBRKRNN  E 0.6585  +81 cp
+879   # high   QRKRNNBB  E 0.6465  +78 cp
+794   # high   RQKNBBRN  E 0.6080  +68 cp
+935   # high   RKBRNQNB  E 0.6070  +67 cp
+348   # high   NBRKQRBN  E 0.6045  +67 cp
+604   # high   RBQNKRBN  E 0.5990  +65 cp
+80    # high   BBNNRKRQ  E 0.5895  +62 cp
+864   # high   BBQRKRNN  E 0.5785  +58 cp
+29    # low    NQNBRKBR  E 0.5005  +0 cp
+593   # low    BRQBNKRN  E 0.5005  +0 cp
+675   # low    BQRKNNRB  E 0.5005  +0 cp
+663   # low    RNBKRNQB  E 0.5005  +1 cp
+210   # low    BNQRKBNR  E 0.5010  +1 cp
+432   # low    BBRNNQKR  E 0.5010  +1 cp
+401   # low    BRQBNNKR  E 0.5015  +2 cp
+521   # low    RNQBBKNR  E 0.5015  +2 cp
+701   # middle RQKBNNBR  E 0.5100  +13 cp
+566   # middle RNBKNBRQ  E 0.5110  +14 cp
+439   # middle RNBNQKRB  E 0.5120  +16 cp
+761   # middle RKNBBNRQ  E 0.5130  +17 cp
+722   # middle BRKNQBNR  E 0.5140  +18 cp
+150   # middle NRBNQBKR  E 0.5155  +20 cp
+57    # middle NNRBBQKR  E 0.5170  +21 cp
+708   # middle RBBKQNNR  E 0.5180  +23 cp
+756   # middle RBBKNNRQ  E 0.5195  +24 cp
+580   # middle QBBRNKRN  E 0.5215  +26 cp
+518   # anchor RNBQKBNR  E 0.5125  +17 cp
+534   # anchor RNBKQBNR  E 0.5310  +34 cp
+94    # anchor NNRKRBBQ  E 0.5140  +18 cp
+936   # anchor RBKRBNQN  E 0.5175  +22 cp

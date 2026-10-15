@@ -141,14 +141,17 @@ engines can't come from the openings. Settings are in
 
 How a position's lines are built:
 
-1. At each ply, a MultiPV search lists the moves within 20 cp of the best
-   move; lines are built by choosing uniformly among them (seeded random
-   walks), so they spread over different first moves.
-2. Both sides face the same limits: each side's total loss over its own moves
-   is capped, and White's and Black's totals must be close.
+1. At each ply, a MultiPV search lists the moves within 50 cp of the best
+   move (the classic engine-analysis threshold for an inaccuracy, so no book
+   move is even an inaccuracy). Lines are built by choosing uniformly among
+   them (seeded random walks), so they spread over different first moves, as
+   different players choose different openings.
+2. Both sides face the same limits: each side's total loss over its three
+   moves is capped at 100 cp, and White's and Black's totals differ by at
+   most 50 cp.
 3. Every candidate line's final position, and the starting position, are
    re-evaluated with a deeper search. Lines whose evaluation drifts more than
-   25 cp from the starting position's are dropped.
+   50 cp from the starting position's are dropped.
 4. The book takes lines from different first moves in turn, each time
    choosing the line that keeps the average drift closest to zero. Positions
    with fewer good lines than needed repeat lines, so every position has
@@ -162,7 +165,9 @@ python code/opening_book_generator.py build --positions 518 --output-dir results
 python code/opening_book_generator.py collect --output-dir results/test_book
 ```
 
-On the cluster: `sbatch jobs/opening_book_array.slurm`, then `collect`.
+On the cluster: `sbatch jobs/opening_book_array.slurm`, then `collect`. For the
+30 pilot positions (`config/pilot_positions.txt`), one per task:
+`sbatch --array=0-29 --export=ALL,POSITIONS=@config/pilot_positions.txt,POSITIONS_PER_TASK=1 jobs/opening_book_array.slurm`.
 `collect` writes to `results/opening_book/book/`:
 
 | File | Contents |

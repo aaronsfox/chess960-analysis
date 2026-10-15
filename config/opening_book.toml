@@ -34,15 +34,18 @@ check_nodes = 2_000_000
 [limits]
 # All in centipawns, from the moving side's point of view.
 # A move is a candidate if it is within `move_margin_cp` of the best move.
-move_margin_cp = 20
-# Each side's total loss over its own moves in a line (its moves' distance
-# from the best move, summed) stays at or below this.
-max_side_loss_cp = 40
+# 50 cp is the classic engine-analysis threshold for an inaccuracy, so every
+# book move is one a strong player could choose without even an inaccuracy.
+move_margin_cp = 50
+# Each side's total loss over its own three moves (each move's distance from
+# the best move, summed) stays at or below this.
+max_side_loss_cp = 100
 # White's and Black's total losses differ by at most this.
-max_side_loss_gap_cp = 20
-# The line's final evaluation (deeper check) is within this of the starting
-# position's (deeper check).
-max_shift_cp = 25
+max_side_loss_gap_cp = 50
+# A single line's final evaluation (deeper check) is within this of the
+# starting position's (deeper check). Balance comes mainly from the mean:
+# each position's 50 lines are chosen so their average drift is about zero.
+max_shift_cp = 50
 
 [sampling]
 # Random walks build a pool of distinct candidate lines; the book's lines
