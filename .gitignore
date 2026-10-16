@@ -4,13 +4,14 @@ engines/*/networks/*
 !engines/*/bin/.gitkeep
 !engines/*/networks/.gitkeep
 
-# Results: production outputs in results/evaluate_sp/ and the opening book in
-# results/opening_book/ are committed so the data is archived with the code.
-# Anything else under results/ (test runs with --output-dir results/test,
-# etc.) stays local.
+# Results: production outputs in results/evaluate_sp/, the opening book in
+# results/opening_book/ and the paper's figures in results/figures/ are
+# committed so they are archived with the code. Anything else under results/
+# (test runs with --output-dir results/test, etc.) stays local.
 results/*
 !results/evaluate_sp/
 !results/opening_book/
+!results/figures/
 logs/
 *.tmp
 
