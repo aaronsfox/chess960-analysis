@@ -9,7 +9,7 @@
 # the rest instead:
 #   conda create -n chess960 python=3.12 -y
 #   conda activate chess960
-#   pip install chess numpy pandas pyarrow pytest
+#   pip install chess numpy pandas pyarrow pytest matplotlib cairosvg
 name: chess960
 channels:
   - conda-forge
@@ -20,6 +20,10 @@ dependencies:
   - pandas>=2.2
   - pyarrow>=15
   - pytest>=8
+  # Figures (code/plot_boards.py). conda-forge's cairosvg brings the cairo
+  # library with it, including on Windows.
+  - matplotlib>=3.8
+  - cairosvg>=2.7
   - pip
   - pip:
       # python-chess is published on PyPI as "chess"

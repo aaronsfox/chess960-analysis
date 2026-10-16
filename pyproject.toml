@@ -11,6 +11,10 @@ dependencies = [
     "pyarrow>=15",
 ]
 
+[project.optional-dependencies]
+# Figures (code/plot_boards.py); cairosvg needs the cairo library installed.
+figures = ["matplotlib>=3.8", "cairosvg>=2.7"]
+
 [dependency-groups]
 dev = ["pytest>=8"]
 

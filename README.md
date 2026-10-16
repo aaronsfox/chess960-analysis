@@ -182,6 +182,22 @@ examined or redone without repeating any search.
 | `opening_book.pgn` | The lines as games from each starting position, for fastchess |
 | `opening_book.epd` | The lines' final positions, one per line |
 
+## Figures
+
+`code/plot_boards.py` draws labelled board diagrams of starting positions
+(coordinates, a caption per board, and optionally an engine's best move as an
+arrow with its evaluation and rank from the evaluate_sp tables):
+
+```bash
+python code/plot_boards.py --positions 518,534,868,94 \
+    --labels "Standard chess" "Mirror of #518" "Most unbalanced" "Mirror of #868" \
+    --out results/figures/boards
+```
+
+It writes a PDF for the manuscript and a PNG for viewing; positions are drawn
+in the order given. Use `--engine caissa` (or lc0, plentychess) for another
+engine's move and evaluation, or `--engine none` for plain boards.
+
 ## Positions
 
 Positions use Scharnagl numbering 0–959, with #518 the standard starting
