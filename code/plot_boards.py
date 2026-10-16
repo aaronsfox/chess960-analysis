@@ -123,6 +123,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--cols", type=int, default=4)
     p.add_argument("--out", default=str(REPO_ROOT / "results" / "figures" / "boards"))
     p.add_argument("--no-arrows", action="store_true")
+    p.add_argument("--no-letters", action="store_true", help="omit the (a), (b), ... panel letters")
     p.add_argument("--style", choices=sorted(STYLES), default="diagram",
                    help="diagram: black-and-white book style (default); colour: tan squares")
     args = p.parse_args(argv)
@@ -165,12 +166,14 @@ def main(argv: list[str] | None = None) -> int:
             ax.set_xlim(-0.65, 8.05)
             ax.set_ylim(-0.65, 8.05)
             ax.set_aspect("equal")
-            ax.set_title(f"({letter})", loc="left", fontsize=9, fontweight="bold", pad=2)
+            if not args.no_letters:
+                ax.set_title(f"({letter})", loc="left", fontsize=9, fontweight="bold", pad=2)
             ax.text(0.5, -0.04, caption_for(pos_id, labels[i], ev, args.engine),
                     transform=ax.transAxes, ha="center", va="top", fontsize=7.2, linespacing=1.35)
         else:
             ax.imshow(img)
-            ax.set_title(f"({letter})", loc="left", fontsize=9, fontweight="bold", pad=2)
+            if not args.no_letters:
+                ax.set_title(f"({letter})", loc="left", fontsize=9, fontweight="bold", pad=2)
             ax.text(0.5, -0.03, caption_for(pos_id, labels[i], ev, args.engine),
                     transform=ax.transAxes, ha="center", va="top", fontsize=7.2, linespacing=1.35)
     fig.subplots_adjust(left=0.01, right=0.99, top=0.97, bottom=0.08, wspace=0.06, hspace=0.42)

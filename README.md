@@ -197,7 +197,8 @@ python code/plot_boards.py --positions 518,534,868,94 \
 It writes a PDF for the manuscript and a PNG for viewing; positions are drawn
 in the order given. The default style is black and white like chess books
 (hatched dark squares, coordinates on the left and bottom); `--style colour`
-gives tan squares instead. Use `--engine caissa` (or lc0, plentychess) for another
+gives tan squares instead. `--no-arrows` and `--no-letters` drop the move arrows
+and the (a), (b), ... panel letters. Use `--engine caissa` (or lc0, plentychess) for another
 engine's move and evaluation, or `--engine none` for plain boards.
 
 ## Positions
