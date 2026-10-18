@@ -21,7 +21,8 @@ towards either side:
 6. **Balanced selection.** From the acceptable lines, the book takes lines
    from different first moves in turn, choosing each time the line that keeps
    the average shift in *expected score* (deeper check, Stockfish's WDL)
-   closest to zero. Expected score is the scale game results are on;
+   closest to zero; it then swaps lines in and out while that brings the
+   average closer to zero, keeping every first move represented. Expected score is the scale game results are on;
    balancing centipawns instead can still tilt the expected result in
    unbalanced positions, because the WDL curve is not straight. Positions with fewer
    good lines than needed repeat lines, so every position has the same number.
@@ -34,6 +35,8 @@ Subcommands
 -----------
 build    Generate lines for positions (one Parquet file per position;
          resumable: finished positions are skipped).
+reselect Redo the line selection for built positions from their saved pools
+         (no engine searches), e.g. after improving the selection.
 collect  Combine the per-position files into the book: a table of every
          line, a per-position summary, and PGN and EPD files for fastchess.
 
@@ -266,10 +269,24 @@ def acceptable(line: Line, s: BookSettings) -> bool:
             and abs(line.shift_cp) <= s.max_shift_cp)
 
 
+BALANCE_TOL = 1e-4   # stop improving once |mean shift| is below this
+
+
 def select_lines(pool: list[Line], k: int, rng: random.Random) -> list[Line]:
-    """Choose ``k`` lines: distinct first moves in turn, each time the line that
-    keeps the mean ``shift`` closest to zero. If the pool has fewer than ``k``
-    lines, all are used and then repeated in the same order."""
+    """Choose ``k`` lines from the acceptable pool.
+
+    1. Rotation: take lines from each first move in turn, each time the line
+       that keeps the running mean ``shift`` closest to zero. This spreads the
+       book over the different first moves.
+    2. Refinement: then swap a chosen line for an unchosen one whenever that
+       brings the mean shift closer to zero, as long as every first move in
+       the selection keeps at least one line. The rotation alone can be
+       forced into poorly balanced lines when one first move's lines all lean
+       the same way.
+
+    If the pool has fewer than ``k`` lines, all are used and then repeated in
+    the same order.
+    """
     if not pool:
         return []
     groups: dict[chess.Move, list[Line]] = defaultdict(list)
@@ -277,11 +294,12 @@ def select_lines(pool: list[Line], k: int, rng: random.Random) -> list[Line]:
         groups[line.first_move].append(line)
     order = sorted(groups, key=lambda m: m.uci())
     rng.shuffle(order)
+    n = min(k, len(pool))
     chosen: list[Line] = []
-    total = 0
-    while len(chosen) < min(k, len(pool)):
+    total = 0.0
+    while len(chosen) < n:
         for first in order:
-            if len(chosen) >= min(k, len(pool)) or not groups[first]:
+            if len(chosen) >= n or not groups[first]:
                 continue
             cands = groups[first]
             rng.shuffle(cands)  # random tie-break
@@ -289,12 +307,40 @@ def select_lines(pool: list[Line], k: int, rng: random.Random) -> list[Line]:
             cands.remove(best)
             chosen.append(best)
             total += best.shift
+
+    # Refinement by best-improvement swaps.
+    unchosen = [ln for first in order for ln in groups[first]]
+    while unchosen and abs(total) / n > BALANCE_TOL:
+        counts: dict[chess.Move, int] = defaultdict(int)
+        for ln in chosen:
+            counts[ln.first_move] += 1
+        best_gain, best_pair = 0.0, None
+        for i, out in enumerate(chosen):
+            for j, inn in enumerate(unchosen):
+                if counts[out.first_move] == 1 and inn.first_move != out.first_move:
+                    continue  # would drop a first move from the book
+                gain = abs(total) - abs(total - out.shift + inn.shift)
+                if gain > best_gain + 1e-12:
+                    best_gain, best_pair = gain, (i, j)
+        if best_pair is None:
+            break
+        i, j = best_pair
+        out, inn = chosen[i], unchosen[j]
+        chosen[i], unchosen[j] = inn, out
+        total += inn.shift - out.shift
+
     distinct = len(chosen)
     i = 0
     while len(chosen) < k:
         chosen.append(chosen[i % distinct])
         i += 1
     return chosen
+
+
+def selection_rng(s: "BookSettings", pos_id: int) -> random.Random:
+    """The selection has its own seed, so rebuilding the book from saved pools
+    (reselect) gives exactly what a fresh build would."""
+    return random.Random(f"{s.seed}:{pos_id}:select")
 
 
 def build_position(engine: chess.engine.SimpleEngine, pos_id: int,
@@ -347,7 +393,7 @@ def build_position(engine: chess.engine.SimpleEngine, pos_id: int,
         # Nothing meets every limit: use the lines that drift least.
         used_fallback = True
         ok = sorted(pool.values(), key=lambda ln: abs(ln.shift_cp))[:s.lines_per_position]
-    chosen = select_lines(ok, s.lines_per_position, rng)
+    chosen = select_lines(ok, s.lines_per_position, selection_rng(s, pos_id))
     if not chosen:
         raise RuntimeError(f"position {pos_id}: no lines of {s.plies} plies found")
 
@@ -417,6 +463,7 @@ def build_position(engine: chess.engine.SimpleEngine, pos_id: int,
             "black_loss_cp": line.black_loss,
             "cp_end_check": chk["cp"] if chk else None,
             "expected_end_check": chk["expected"] if chk else math.nan,
+            "depth_end_check": chk["depth"] if chk else None,
             "shift_cp_check": line.shift_cp,
             "shift_balance": line.shift,
             "acceptable": key in ok_keys,
@@ -488,6 +535,121 @@ def cmd_build(args: argparse.Namespace) -> int:
     finally:
         engine.quit()
     log.info("done")
+    return 0
+
+
+def reselect_position(s: BookSettings, old: pd.DataFrame, pool_df: pd.DataFrame
+                      ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+    """Redo one position's selection from its saved pool (no engine searches)."""
+    pos_id = int(old["position_id"].iloc[0])
+    position = get_position(pos_id)
+    root = position.board()
+    pool_lines: list[Line] = []
+    for r in pool_df.itertuples(index=False):
+        moves = tuple(chess.Move.from_uci(u) for u in r.moves_uci.split())
+        pool_lines.append(Line(moves, int(r.cp_end), int(r.white_loss_cp), int(r.black_loss_cp),
+                               shift_cp=float(r.shift_cp_check), shift=float(r.shift_balance)))
+    ok = [ln for ln in pool_lines if acceptable(ln, s)]
+    used_fallback = False
+    if not ok:
+        used_fallback = True
+        ok = sorted(pool_lines, key=lambda ln: abs(ln.shift_cp))[:s.lines_per_position]
+    chosen = select_lines(ok, s.lines_per_position, selection_rng(s, pos_id))
+
+    by_moves = pool_df.set_index("moves_uci")
+    old_depth = old.drop_duplicates("moves_uci").set_index("moves_uci")["depth_end_check"]
+    first = old.iloc[0]
+    rows, seen = [], set()
+    for idx, line in enumerate(chosen):
+        board = root.copy(stack=False)
+        san = []
+        for move in line.moves:
+            san.append(board.san(move))
+            board.push(move)
+        key = " ".join(m.uci() for m in line.moves)
+        pr = by_moves.loc[key]
+        depth = pr["depth_end_check"] if "depth_end_check" in by_moves.columns else old_depth.get(key)
+        rows.append({
+            "position_id": pos_id,
+            "arrangement": position.arrangement,
+            "start_fen": position.fen,
+            "line_index": idx,
+            "repeat": line.moves in seen,
+            "moves_uci": key,
+            "moves_san": " ".join(san),
+            "first_move": line.first_move.uci(),
+            "end_fen": board.fen(shredder=True),
+            "cp_root": first["cp_root"],
+            "cp_end": line.cp_end,
+            "shift_cp": line.cp_end - first["cp_root"],
+            "white_loss_cp": line.white_loss,
+            "black_loss_cp": line.black_loss,
+            "cp_root_check": first["cp_root_check"],
+            "expected_root_check": first["expected_root_check"],
+            "cp_end_check": pr["cp_end_check"],
+            "expected_end_check": pr["expected_end_check"],
+            "depth_end_check": depth,
+        })
+        seen.add(line.moves)
+    df = pd.DataFrame(rows)
+    df["shift_cp_check"] = df["cp_end_check"] - df["cp_root_check"]
+    df["shift_expected_check"] = df["expected_end_check"] - df["expected_root_check"]
+    info = {
+        "acceptable": len(ok), "distinct_selected": len(seen),
+        "first_moves": df["first_move"].nunique(), "fallback": used_fallback,
+    }
+    # Search statistics and provenance carry over from the build.
+    keep = ["walks", "pool_size", "pool_first_moves", "rejected_gap", "rejected_shift",
+            "pool_shift_mean", "pool_shift_sd", "candidate_searches", "check_searches",
+            "seconds", "engine", "engine_version", "engine_id_name", "binary_sha256",
+            "settings_json", "run_id", "hostname", "cpu", "finished_utc"]
+    for col in keep:
+        if col in old.columns:
+            df[col] = first[col]
+    for k_, v in info.items():
+        df[k_] = v
+    df["selection"] = "rotation+swap"
+    df["reselected_utc"] = utc_now()
+
+    counts: dict[str, int] = defaultdict(int)
+    for line in chosen:
+        counts[" ".join(m.uci() for m in line.moves)] += 1
+    ok_keys = {" ".join(m.uci() for m in ln.moves) for ln in ok}
+    pool_df = pool_df.copy()
+    pool_df["acceptable"] = pool_df["moves_uci"].isin(ok_keys)
+    pool_df["times_selected"] = pool_df["moves_uci"].map(lambda m: counts.get(m, 0))
+    return df, pool_df, info
+
+
+def cmd_reselect(args: argparse.Namespace) -> int:
+    """Redo the line selection for built positions from their saved pools."""
+    config = load_toml(Path(args.config))
+    s = BookSettings.from_config(config)
+    out_dir = output_dir(config, args.output_dir)
+    engine_key = config["book"]["engine"]
+    pos_ids = parse_position_spec(args.positions)
+    current = json.dumps(dataclasses.asdict(s), sort_keys=True)
+    done = changed = 0
+    for pos_id in pos_ids:
+        raw, pool = raw_path(out_dir, engine_key, pos_id), pool_path(out_dir, engine_key, pos_id)
+        if not raw.exists() or not pool.exists():
+            continue
+        old, pool_df = pd.read_parquet(raw), pd.read_parquet(pool)
+        if "settings_json" in old and old["settings_json"].iloc[0] != current:
+            log.warning("sp%03d was built with different settings than %s; the current limits "
+                        "are applied to its saved pool", pos_id, args.config)
+        before = old["shift_expected_check"].mean() if "shift_expected_check" in old else math.nan
+        df, pool_df, info = reselect_position(s, old, pool_df)
+        after = df["shift_expected_check"].mean()
+        write_parquet_atomic(pool_df, pool)
+        write_parquet_atomic(df, raw)
+        done += 1
+        if set(df["moves_uci"]) != set(old["moves_uci"]):
+            changed += 1
+        if args.verbose or abs(before) > 0.002:
+            log.info("sp%03d: mean drift %+.4f -> %+.4f E (%d first moves)",
+                     pos_id, before, after, info["first_moves"])
+    log.info("reselected %d positions (%d with a changed selection); now run collect", done, changed)
     return 0
 
 
@@ -601,6 +763,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--allow-unlocked", action="store_true",
                    help="run without a lock-file entry (testing only)")
     p.set_defaults(func=cmd_build)
+
+    p = sub.add_parser("reselect", parents=[common],
+                       help="redo the line selection from saved pools (no searches)")
+    p.add_argument("--positions", default="0-959")
+    p.set_defaults(func=cmd_reselect)
 
     p = sub.add_parser("collect", parents=[common], help="combine into the book files")
     p.set_defaults(func=cmd_collect)

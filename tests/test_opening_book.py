@@ -50,3 +50,15 @@ def test_select_is_reproducible():
     a = select_lines(pool(), 4, random.Random("960:518"))
     b = select_lines(pool(), 4, random.Random("960:518"))
     assert [ln.moves for ln in a] == [ln.moves for ln in b]
+
+
+def test_swaps_fix_balance_without_dropping_first_moves():
+    # One first move's lines all lean the same way, so rotation alone leaves
+    # the mean off zero; swaps should balance it and keep all three first moves.
+    pool = ([line("b2b3", m, -0.05) for m in ("e7e5", "c7c5", "e7e6", "d7d5")]
+            + [line("e2e4", m, s) for m, s in (("e7e5", 0.02), ("c7c5", 0.03), ("e7e6", -0.01), ("d7d5", 0.04))]
+            + [line("d2d4", m, s) for m, s in (("d7d5", 0.01), ("g8f6", 0.05), ("e7e6", -0.02), ("c7c5", 0.03))])
+    chosen = select_lines(pool, 6, random.Random(1))
+    assert len({ln.moves for ln in chosen}) == 6
+    assert {ln.first_move.uci() for ln in chosen} == {"b2b3", "e2e4", "d2d4"}
+    assert abs(sum(ln.shift for ln in chosen) / 6) <= 0.002
