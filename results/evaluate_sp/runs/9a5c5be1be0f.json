@@ -1,0 +1,57 @@
+{
+  "engine": "plentychess",
+  "engine_name": "PlentyChess",
+  "engine_version": "8.0.0",
+  "engine_id_name": "PlentyChess 8.0.0",
+  "version_matches_id": true,
+  "binary_sha256": "f3a0a6132493a5641b8c87cb1f7dac7450a035e1f1ddf530bc4fbd8ee9a2535e",
+  "network_sha256": null,
+  "uci_options_applied": {
+    "Threads": 1,
+    "Hash": 1024
+  },
+  "uci_option_defaults": {
+    "Hash": 16,
+    "Threads": 1,
+    "MultiPV": 1,
+    "MoveOverhead": 100,
+    "UCI_Chess960": false,
+    "Ponder": false,
+    "Datagen": false,
+    "Minimal": false,
+    "SyzygyPath": "",
+    "SyzygyProbeLimit": 7
+  },
+  "environment": {},
+  "run_id": "9a5c5be1be0f",
+  "config_file": "config/evaluate_sp.toml",
+  "platform": "linux",
+  "os": "Linux-5.15.0-160-generic-x86_64-with-glibc2.35",
+  "hostname": "hpc-gc-b-2",
+  "cpu": "Intel(R) Xeon(R) Gold 6240R CPU @ 2.40GHz",
+  "gpu": "",
+  "python": "3.12.15",
+  "python_chess": "1.11.2",
+  "budgets": [
+    10000,
+    100000,
+    1000000,
+    10000000,
+    100000000,
+    1000000000
+  ],
+  "multipv": 1,
+  "positions": [
+    540,
+    541,
+    542,
+    543,
+    544,
+    545,
+    546,
+    547,
+    548,
+    549
+  ],
+  "started": "2026-10-15T20:18:21+00:00"
+}

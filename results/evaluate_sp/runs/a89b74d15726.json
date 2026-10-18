@@ -1,0 +1,61 @@
+{
+  "engine": "caissa",
+  "engine_name": "Caissa",
+  "engine_version": "2.0",
+  "engine_id_name": "Caissa 2.0 BMI2",
+  "version_matches_id": true,
+  "binary_sha256": "2812a449cfa3b3bcb5f3fb05640f682253d95408e2d993f50b275be634187bfd",
+  "network_sha256": null,
+  "uci_options_applied": {
+    "Threads": 1,
+    "Hash": 1024,
+    "UCI_ShowWDL": true
+  },
+  "uci_option_defaults": {
+    "Hash": 64,
+    "MultiPV": 1,
+    "MoveOverhead": 10,
+    "Threads": 1,
+    "Ponder": false,
+    "EvalFile": "<empty>",
+    "EvalRandomization": 0,
+    "SyzygyPath": "<empty>",
+    "SyzygyProbeLimit": 6,
+    "UCI_Chess960": false,
+    "UCI_ShowWDL": false,
+    "UseSAN": false,
+    "ColorConsoleOutput": false
+  },
+  "environment": {},
+  "run_id": "a89b74d15726",
+  "config_file": "config/evaluate_sp.toml",
+  "platform": "linux",
+  "os": "Linux-5.15.0-160-generic-x86_64-with-glibc2.35",
+  "hostname": "hpc-gc-b-2",
+  "cpu": "Intel(R) Xeon(R) Gold 6240R CPU @ 2.40GHz",
+  "gpu": "",
+  "python": "3.12.15",
+  "python_chess": "1.11.2",
+  "budgets": [
+    10000,
+    100000,
+    1000000,
+    10000000,
+    100000000,
+    1000000000
+  ],
+  "multipv": 1,
+  "positions": [
+    490,
+    491,
+    492,
+    493,
+    494,
+    495,
+    496,
+    497,
+    498,
+    499
+  ],
+  "started": "2026-10-15T08:34:54+00:00"
+}
