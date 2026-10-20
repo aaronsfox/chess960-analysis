@@ -31,6 +31,10 @@ code/
   utils.py          shared helpers: positions, engine setup, metrics, IO
   setup_engines.py  check, fingerprint and smoke-test the engines
   evaluate_sp.py    evaluate starting positions and collect results
+  opening_book_generator.py  build the self-play opening book
+  selfplay.py       engine self-play games with fastchess, and their tables
+  plot_boards.py    board diagrams for figures
+tools/fastchess/    build script for fastchess (the match runner); bin/ not committed
 jobs/               SLURM job scripts (CPU engines; Lc0 on GPU)
 tests/              unit tests (pytest)
 results/            outputs (not committed)
@@ -177,14 +181,53 @@ On the cluster: `sbatch jobs/opening_book_array.slurm`, then `collect`. For the
 | --- | --- |
 | `opening_book_lines.parquet` / `.csv` | Every line: moves (UCI and SAN), final position, each side's loss, and the evaluation shift (shallow and deeper check) |
 | `opening_book_summary.csv` | Per position: distinct lines, first moves, mean shift, mean loss per side |
+| `opening_book.pgn` | The lines as games from each starting position, for fastchess |
+| `opening_book.epd` | The lines' final positions, one per line |
 
 `build` also keeps every candidate line it checked (`raw/<engine>/pool/`),
 with its evaluations and whether it was selected, so the selection can be
 examined or redone without repeating any search: `reselect` rebuilds every
 position's selection from these saved lines in about a minute, then run
 `collect` again.
-| `opening_book.pgn` | The lines as games from each starting position, for fastchess |
-| `opening_book.epd` | The lines' final positions, one per line |
+
+## Self-play (selfplay.py)
+
+Each engine plays itself from every starting position at 10+0.1, single
+threaded with a 64 MB hash. Every game starts from one of the position's 50
+book lines, and each line is played 10 times with the colours swapped in
+pairs, so every position gets 500 games. Two copies of the same binary play
+(`<engine>_a` and `<engine>_b`). Games use fastchess's draw adjudication
+(from move 40, 8 moves within 10 cp of 0) and two-sided resignation (5 moves
+beyond 10 pawns). All settings are in `config/selfplay.toml`.
+
+```bash
+bash tools/fastchess/build_linux.sh          # once, on a login node
+python code/selfplay.py run --engine stockfish --positions 518 --concurrency 4 \
+    --output-dir results/test_selfplay
+python code/selfplay.py collect --output-dir results/test_selfplay
+```
+
+`run` plays one fastchess match per position and writes it, gzipped, to
+`raw/<engine>/spNNN.pgn.gz` only once all 500 games are done, so an
+interrupted job loses at most the position in progress; rerunning skips
+finished positions. Each run's settings, engine and fastchess hashes and the
+book's hash go to `runs/<id>.json`.
+
+On the cluster: `sbatch --export=ALL,ENGINE=stockfish jobs/selfplay_array.slurm`
+(16 cores per task, one game per physical core), likewise for `caissa`, then
+`collect`. Pilot on the 30 pilot positions, one per task:
+`sbatch --array=0-29 --time=01:00:00 --export=ALL,ENGINE=stockfish,POSITIONS=@config/pilot_positions.txt,POSITIONS_PER_TASK=1 jobs/selfplay_array.slurm`.
+
+`collect` writes to `results/selfplay/tables/`:
+
+| File | Contents |
+| --- | --- |
+| `selfplay_games.parquet` | One row per game: position, book line, result (White's score), termination and reason, length, first engine evaluation, mean depth/nodes and time used per side |
+| `selfplay_positions.parquet` / `.csv` | Per engine and position: W/D/L, draw rate, White's expected score with its standard error, Elo-equivalent advantage |
+| `selfplay_lines.parquet` | The same per book line (for cluster-robust analyses: games sharing a line are not independent) |
+
+The tables and run records are committed; the PGNs (about 0.7 GB per engine)
+are not, and should be archived separately (e.g. with the data release).
 
 ## Figures
 
