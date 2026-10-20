@@ -226,8 +226,9 @@ On the cluster: `sbatch --export=ALL,ENGINE=stockfish jobs/selfplay_array.slurm`
 | `selfplay_positions.parquet` / `.csv` | Per engine and position: W/D/L, draw rate, White's expected score with its standard error, Elo-equivalent advantage |
 | `selfplay_lines.parquet` | The same per book line (for cluster-robust analyses: games sharing a line are not independent) |
 
-The tables and run records are committed; the PGNs (about 0.7 GB per engine)
-are not, and should be archived separately (e.g. with the data release).
+The PGNs, tables and run records are all committed. The PGNs come to about
+0.7 GB per engine (one ~0.7 MB file per position), so push one engine at a
+time: GitHub refuses a single push over 2 GB.
 
 ## Figures
 
