@@ -190,7 +190,8 @@ def count_games(pgn: Path) -> int:
 
 
 def play_position(cfg: EngineConfig, s: MatchSettings, lines: pd.DataFrame, dest: Path,
-                  concurrency: int, work_root: Path) -> dict[str, Any]:
+                  concurrency: int, work_root: Path, progress_seconds: float = 300
+                  ) -> dict[str, Any]:
     """Play one position's match and write it to ``dest`` (gzip) atomically."""
     n_lines = len(lines)
     expected = n_lines * s.games_per_line
@@ -203,11 +204,27 @@ def play_position(cfg: EngineConfig, s: MatchSettings, lines: pd.DataFrame, dest
                                 log_file=work / "fastchess.log")
         started = time.monotonic()
         # fastchess writes config.json in its working directory: keep it in work/.
-        proc = subprocess.run(cmd, cwd=work, capture_output=True, text=True)
+        out_file = work / "output.txt"
+        with open(out_file, "w") as out:
+            proc = subprocess.Popen(cmd, cwd=work, stdout=out, stderr=subprocess.STDOUT)
+            # Report progress every few minutes so a long match is visible in
+            # the job log (games finished so far, from the PGN).
+            while True:
+                try:
+                    proc.wait(timeout=progress_seconds)
+                    break
+                except subprocess.TimeoutExpired:
+                    done = count_games(pgn)
+                    elapsed = time.monotonic() - started
+                    eta = elapsed / done * (expected - done) if done else math.nan
+                    log.info("  sp%03d: %d/%d games after %.0f min (about %.0f min to go)",
+                             int(lines.position_id.iloc[0]), done, expected, elapsed / 60,
+                             eta / 60)
         seconds = time.monotonic() - started
+        output = out_file.read_text(errors="replace")
         games = count_games(pgn)
         if proc.returncode != 0 or games != expected:
-            tail = "\n".join((proc.stdout + proc.stderr).strip().splitlines()[-20:])
+            tail = "\n".join(output.strip().splitlines()[-20:])
             status = (f"crashed (signal {-proc.returncode})" if proc.returncode < 0
                       else f"exit {proc.returncode}")
             # Keep fastchess's files (log, openings, config.json, any games)
@@ -215,7 +232,6 @@ def play_position(cfg: EngineConfig, s: MatchSettings, lines: pd.DataFrame, dest
             keep = REPO_ROOT / "logs" / "selfplay_failed" / f"{cfg.key}_{work.name}"
             shutil.copytree(work, keep, dirs_exist_ok=True)
             (keep / "command.txt").write_text(" ".join(cmd) + "\n")
-            (keep / "output.txt").write_text(proc.stdout + "\n--- stderr ---\n" + proc.stderr)
             raise RuntimeError(f"fastchess {status}, {games}/{expected} games "
                                f"(files kept in {keep})\n{tail}")
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -286,7 +302,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             continue
         try:
             info = play_position(cfg, s, lines, raw_path(out_dir, cfg.key, pos_id),
-                                 concurrency, work_root)
+                                 concurrency, work_root, progress_seconds=60 * args.progress_minutes)
         except RuntimeError as exc:
             log.error("sp%03d failed: %s", pos_id, exc)
             failed.append(pos_id)
@@ -535,6 +551,8 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--concurrency", type=int, default=0,
                    help="games at once (default: the CPUs available to this process)")
     r.add_argument("--work-dir", help="scratch folder for fastchess (default $TMPDIR)")
+    r.add_argument("--progress-minutes", type=float, default=5,
+                   help="log games finished every this many minutes (default 5)")
     r.add_argument("--overwrite", action="store_true", help="replay finished positions")
     r.add_argument("--allow-unlocked", action="store_true",
                    help="allow an engine with no lock entry (testing only)")
