@@ -523,7 +523,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="command", required=True)
 
-    r = sub.add_parser("run", help="play the games for some positions")
+    # --config, --output-dir and -v also work after the subcommand.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--config", default=argparse.SUPPRESS)
+    common.add_argument("--output-dir", default=argparse.SUPPRESS, help="override [output].dir")
+    common.add_argument("-v", "--verbose", action="store_true", default=argparse.SUPPRESS)
+
+    r = sub.add_parser("run", parents=[common], help="play the games for some positions")
     r.add_argument("--engine", required=True, help="engine folder under engines/")
     r.add_argument("--positions", default="0-959", help="e.g. 0-9, 518,868 or @file")
     r.add_argument("--concurrency", type=int, default=0,
@@ -534,7 +540,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="allow an engine with no lock entry (testing only)")
     r.set_defaults(func=cmd_run)
 
-    c = sub.add_parser("collect", help="parse finished games into tables")
+    c = sub.add_parser("collect", parents=[common], help="parse finished games into tables")
     c.set_defaults(func=cmd_collect)
     return p
 

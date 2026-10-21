@@ -83,3 +83,12 @@ def test_settings_and_command():
     assert "twosided=true" in cmd and "tc=10+0.1" in cmd
     with pytest.raises(ValueError):
         MatchSettings.from_config({**config, "match": {**config["match"], "games_per_line": 5}})
+
+
+def test_output_dir_before_or_after_subcommand():
+    from selfplay import build_parser
+    p = build_parser()
+    assert p.parse_args(["--output-dir", "x", "run", "--engine", "sf"]).output_dir == "x"
+    assert p.parse_args(["run", "--engine", "sf", "--output-dir", "y"]).output_dir == "y"
+    assert p.parse_args(["collect", "--output-dir", "z"]).output_dir == "z"
+    assert p.parse_args(["collect"]).output_dir is None
