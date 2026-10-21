@@ -208,7 +208,9 @@ def play_position(cfg: EngineConfig, s: MatchSettings, lines: pd.DataFrame, dest
         games = count_games(pgn)
         if proc.returncode != 0 or games != expected:
             tail = "\n".join((proc.stdout + proc.stderr).strip().splitlines()[-20:])
-            raise RuntimeError(f"fastchess exit {proc.returncode}, {games}/{expected} games\n"
+            status = (f"crashed (signal {-proc.returncode})" if proc.returncode < 0
+                      else f"exit {proc.returncode}")
+            raise RuntimeError(f"fastchess {status}, {games}/{expected} games\n"
                                f"{tail}")
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_name(dest.name + ".tmp")
