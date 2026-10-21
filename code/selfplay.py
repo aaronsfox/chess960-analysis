@@ -169,7 +169,7 @@ def fastchess_command(cfg: EngineConfig, s: MatchSettings, openings: Path, pgn: 
     if s.tablebases:
         cmd += ["-tb", s.tablebases, "-tbpieces", str(s.tbpieces)]
     if log_file is not None:
-        cmd += ["-log", f"file={log_file}", "level=warn"]
+        cmd += ["-log", f"file={log_file}", "level=info"]
     return cmd
 
 
@@ -210,8 +210,14 @@ def play_position(cfg: EngineConfig, s: MatchSettings, lines: pd.DataFrame, dest
             tail = "\n".join((proc.stdout + proc.stderr).strip().splitlines()[-20:])
             status = (f"crashed (signal {-proc.returncode})" if proc.returncode < 0
                       else f"exit {proc.returncode}")
-            raise RuntimeError(f"fastchess {status}, {games}/{expected} games\n"
-                               f"{tail}")
+            # Keep fastchess's files (log, openings, config.json, any games)
+            # for diagnosis; logs/ is not committed.
+            keep = REPO_ROOT / "logs" / "selfplay_failed" / f"{cfg.key}_{work.name}"
+            shutil.copytree(work, keep, dirs_exist_ok=True)
+            (keep / "command.txt").write_text(" ".join(cmd) + "\n")
+            (keep / "output.txt").write_text(proc.stdout + "\n--- stderr ---\n" + proc.stderr)
+            raise RuntimeError(f"fastchess {status}, {games}/{expected} games "
+                               f"(files kept in {keep})\n{tail}")
         dest.parent.mkdir(parents=True, exist_ok=True)
         tmp = dest.with_name(dest.name + ".tmp")
         with open(pgn, "rb") as src, gzip.open(tmp, "wb", compresslevel=6) as out:
