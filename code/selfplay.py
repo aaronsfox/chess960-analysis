@@ -442,6 +442,107 @@ def game_row(game: chess.pgn.Game, engine_key: str, book_moves: dict[int, str]
     }
 
 
+# Fast parsing: fastchess's PGNs are machine-written and every move carries a
+# comment, so games can be read from the text without replaying the moves
+# (python-chess's full parser checks every move's legality and is ~50x slower).
+HEADER_RE = re.compile(r'^\[(\w+) "(.*)"\]\s*$', re.M)
+MOVE_COMMENT_RE = re.compile(r"([^\s{}]+)\s*\{([^}]*)\}")
+MOVE_NUMBER_RE = re.compile(r"^\d+\.+$")
+RESULTS = {"1-0", "0-1", "1/2-1/2", "*"}
+
+
+def split_games(text: str) -> Iterator[tuple[dict[str, str], str]]:
+    """(headers, movetext) for each game in a PGN string."""
+    for chunk in re.split(r"\n(?=\[Event )", text.strip()):
+        head_end = chunk.find("\n\n")
+        if head_end < 0:
+            continue
+        headers = dict(HEADER_RE.findall(chunk[:head_end]))
+        yield headers, chunk[head_end:]
+
+
+def fast_game_row(headers: dict[str, str], movetext: str, engine_key: str,
+                  book_moves_san: dict[int, str]) -> dict[str, Any]:
+    """The same row as game_row, from the PGN text. Book lines are matched on
+    SAN (``book_moves_san``: line_index -> moves_san)."""
+    without_comments = re.sub(r"\{[^}]*\}", " ", movetext)
+    sans = [tok for tok in without_comments.split()
+            if not MOVE_NUMBER_RE.match(tok) and tok not in RESULTS]
+    pairs = MOVE_COMMENT_RE.findall(movetext)
+    played_book: list[str] = []
+    stats: dict[bool, list[dict[str, Any]]] = {True: [], False: []}
+    first_eval_white: int | None = None
+    # Every starting position has White to move, so plies alternate W, B, ...
+    for ply, (san, comment) in enumerate(pairs):
+        white = ply % 2 == 0
+        if comment.strip().startswith("book"):
+            played_book.append(san)
+            continue
+        parsed = parse_move_comment(comment)
+        if parsed:
+            stats[white].append(parsed)
+            if first_eval_white is None and parsed["cp"] is not None:
+                first_eval_white = parsed["cp"] if white else -parsed["cp"]
+    last_comment = pairs[-1][1] if pairs else ""
+    return _row(headers, engine_key, book_moves_san, played_book, stats, first_eval_white,
+                last_comment, len(sans))
+
+
+def _row(h: dict[str, str], engine_key: str, book_moves: dict[int, str],
+         played_book: list[str], stats: dict[bool, list[dict[str, Any]]],
+         first_eval_white: int | None, last_comment: str, plies: int) -> dict[str, Any]:
+    rnd = int(h.get("Round", "0") or 0)
+    n_lines = len(book_moves)
+    line_index = (rnd - 1) % n_lines if n_lines and rnd > 0 else -1
+    book_str = " ".join(played_book)
+    line_match = book_moves.get(line_index) == book_str
+    if not line_match:
+        matches = [i for i, mv in book_moves.items() if mv == book_str]
+        line_index = matches[0] if matches else -1
+    result = h.get("Result", "*")
+
+    def mean(side: bool, key: str) -> float:
+        vals = [x[key] for x in stats[side] if x[key] is not None]
+        return float(sum(vals) / len(vals)) if vals else math.nan
+
+    return {
+        "engine": engine_key,
+        "position_id": get_position_id(h.get("FEN", "")),
+        "line_index": line_index,
+        "line_matched_by_round": line_match,
+        "round": rnd,
+        "white_player": h.get("White", ""),
+        "result": result,
+        "score_white": RESULT_WHITE.get(result, math.nan),
+        "termination": h.get("Termination", ""),
+        "end_reason": end_reason(last_comment) or "",
+        "plies": plies,
+        "book_plies": len(played_book),
+        "first_eval_white_cp": first_eval_white,
+        "mean_depth_white": mean(True, "depth"),
+        "mean_depth_black": mean(False, "depth"),
+        "mean_nodes_white": mean(True, "nodes"),
+        "mean_nodes_black": mean(False, "nodes"),
+        "time_used_white": sum(x["time"] for x in stats[True]),
+        "time_used_black": sum(x["time"] for x in stats[False]),
+        "duration": h.get("GameDuration", ""),
+        "start_time": h.get("GameStartTime", ""),
+        "time_control": h.get("TimeControl", ""),
+        "engine_id_name": h.get("EngineWhiteName", ""),
+    }
+
+
+def parse_file(path: Path, book_moves_san: dict[int, str]) -> list[dict[str, Any]]:
+    with gzip.open(path, "rt", errors="replace") as fh:
+        text = fh.read()
+    return [fast_game_row(h, mt, path.parent.name, book_moves_san)
+            for h, mt in split_games(text)]
+
+
+def _parse_job(job: tuple[Path, dict[int, str]]) -> list[dict[str, Any]]:
+    return parse_file(*job)
+
+
 _FEN_IDS: dict[str, int] | None = None
 
 
@@ -486,20 +587,30 @@ def cmd_collect(args: argparse.Namespace) -> int:
     config = load_toml(Path(args.config))
     out_dir = output_dir(config, args.output_dir)
     book = load_book(book_path(config))
-    book_by_pos = {pid: dict(zip(grp.line_index, grp.moves_uci))
+    book_by_pos = {pid: dict(zip(grp.line_index, grp.moves_san))
                    for pid, grp in book.groupby("position_id")}
-    rows: list[dict[str, Any]] = []
     files = sorted((out_dir / "raw").glob("*/sp*.pgn.gz"))
     if not files:
         log.error("no PGNs under %s", out_dir / "raw")
         return 1
-    for n, path in enumerate(files, 1):
-        engine_key = path.parent.name
-        pos_id = int(path.name[2:5])
-        for game in iter_games(path):
-            rows.append(game_row(game, engine_key, book_by_pos.get(pos_id, {})))
-        if n % 50 == 0:
-            log.info("parsed %d/%d files", n, len(files))
+    jobs = [(path, book_by_pos.get(int(path.name[2:5]), {})) for path in files]
+    workers = args.workers or min(len(os.sched_getaffinity(0)), 16)
+    log.info("parsing %d files with %d worker(s)", len(files), workers)
+    rows: list[dict[str, Any]] = []
+    started = time.monotonic()
+    if workers > 1:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(workers) as pool:
+            for n, file_rows in enumerate(pool.map(_parse_job, jobs, chunksize=4), 1):
+                rows.extend(file_rows)
+                if n % 100 == 0:
+                    log.info("parsed %d/%d files", n, len(files))
+    else:
+        for n, job in enumerate(jobs, 1):
+            rows.extend(_parse_job(job))
+            if n % 100 == 0:
+                log.info("parsed %d/%d files", n, len(files))
+    log.info("parsed %d games in %.0fs", len(rows), time.monotonic() - started)
     games = pd.DataFrame(rows)
     bad = games[(games.line_index < 0) | (games.position_id < 0)]
     if len(bad):
@@ -559,6 +670,8 @@ def build_parser() -> argparse.ArgumentParser:
     r.set_defaults(func=cmd_run)
 
     c = sub.add_parser("collect", parents=[common], help="parse finished games into tables")
+    c.add_argument("--workers", type=int, default=0,
+                   help="parallel processes (default: CPUs available, at most 16)")
     c.set_defaults(func=cmd_collect)
     return p
 

@@ -92,3 +92,14 @@ def test_output_dir_before_or_after_subcommand():
     assert p.parse_args(["run", "--engine", "sf", "--output-dir", "y"]).output_dir == "y"
     assert p.parse_args(["collect", "--output-dir", "z"]).output_dir == "z"
     assert p.parse_args(["collect"]).output_dir is None
+
+
+def test_fast_parser_matches_full_parser():
+    from selfplay import fast_game_row, split_games
+    import pandas as pd
+    two = PGN + "\n" + PGN.replace('[Round "2"]', '[Round "3"]')
+    book_san = {0: "e4 e5 d4 d5 c4 c6", 1: "e4 e5 d4 exd4 Rxd4 Nf6"}
+    fast = [fast_game_row(h, mt, "stockfish", book_san) for h, mt in split_games(two)]
+    slow = [game_row(chess.pgn.read_game(io.StringIO(g)), "stockfish", BOOK)
+            for g in (PGN, PGN.replace('[Round "2"]', '[Round "3"]'))]
+    pd.testing.assert_frame_equal(pd.DataFrame(fast), pd.DataFrame(slow))
