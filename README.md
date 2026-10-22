@@ -198,7 +198,9 @@ book lines, and each line is played 10 times with the colours swapped in
 pairs, so every position gets 500 games. Two copies of the same binary play
 (`<engine>_a` and `<engine>_b`). Games use fastchess's draw adjudication
 (from move 40, 8 moves within 10 cp of 0) and two-sided resignation (5 moves
-beyond 10 pawns). All settings are in `config/selfplay.toml`.
+beyond 10 pawns), and a move may overrun the clock by up to 100 ms before it
+loses on time. All settings are in `config/selfplay.toml`. The 30-position
+pilot (no time margin) is kept separately in `results/pilot/selfplay/`.
 
 ```bash
 bash tools/fastchess/build_linux.sh          # once, on a login node
