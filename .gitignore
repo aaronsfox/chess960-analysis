@@ -8,14 +8,15 @@ tools/*/bin/*
 
 # Results: production outputs in results/evaluate_sp/, the opening book in
 # results/opening_book/, the self-play games, tables and run records in
-# results/selfplay/ and the paper's figures in results/figures/ are committed
-# so they are archived with the code. Anything else under results/ (test runs
+# results/selfplay/, the pilot runs in results/pilot/ and the paper's figures
+# in results/figures/ are committed so they are archived with the code. Anything else under results/ (test runs
 # with --output-dir results/test, etc.) stays local.
 results/*
 !results/evaluate_sp/
 !results/opening_book/
 !results/figures/
 !results/selfplay/
+!results/pilot/
 logs/
 *.tmp
 
