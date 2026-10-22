@@ -71,6 +71,7 @@ class MatchSettings:
     draw: dict[str, Any]
     resign: dict[str, Any]
     maxmoves: int
+    timemargin_ms: int
     tablebases: str
     tbpieces: int
     uci_overrides: dict[str, Any]
@@ -86,7 +87,8 @@ class MatchSettings:
             tc=str(m["tc"]), games_per_line=games,
             fastchess=path if path.is_absolute() else REPO_ROOT / path,
             draw=dict(m.get("draw", {})), resign=dict(m.get("resign", {})),
-            maxmoves=int(m.get("maxmoves", 0)), tablebases=str(m.get("tablebases", "")),
+            maxmoves=int(m.get("maxmoves", 0)),
+            timemargin_ms=int(m.get("timemargin_ms", 0)), tablebases=str(m.get("tablebases", "")),
             tbpieces=int(m.get("tbpieces", 5)),
             uci_overrides=dict(config.get("uci_overrides", {})),
         )
@@ -155,7 +157,10 @@ def fastchess_command(cfg: EngineConfig, s: MatchSettings, openings: Path, pgn: 
     rounds = n_lines * s.games_per_line // 2
     cmd = [str(s.fastchess), "-variant", "fischerandom"]
     cmd += engine_args(cfg, f"{cfg.key}_a", s) + engine_args(cfg, f"{cfg.key}_b", s)
-    cmd += ["-each", f"tc={s.tc}", "proto=uci",
+    cmd += ["-each", f"tc={s.tc}", "proto=uci"]
+    if s.timemargin_ms:
+        cmd += [f"timemargin={s.timemargin_ms}"]
+    cmd += [
             "-openings", f"file={openings}", "format=pgn", "order=sequential",
             "-rounds", str(rounds), "-repeat", "-concurrency", str(concurrency),
             "-recover", "-ratinginterval", "0", "-autosaveinterval", "0",
@@ -356,14 +361,24 @@ def parse_move_comment(comment: str) -> dict[str, Any] | None:
             "seldepth": int(kv["sd"]) if "sd" in kv else None}
 
 
+OVERRUN_RE = re.compile(r"\s*\((\d+)ms overrun\)")
+
+
 def end_reason(comment: str) -> str | None:
     """The reason fastchess writes into the last move's comment, e.g.
-    'Draw by adjudication' or 'White wins by adjudication: SyzygyTB'."""
+    'Draw by adjudication' or 'White wins by adjudication: SyzygyTB'. A loss
+    on time's overrun ('White loses on time (12ms overrun)') is dropped here
+    and kept separately by time_overrun_ms."""
     parts = [p.strip() for p in comment.split(",")]
     for part in reversed(parts):
         if part and not SCORE_RE.match(part) and not KV_RE.match(part) and part != "book":
-            return part
+            return OVERRUN_RE.sub("", part)
     return None
+
+
+def time_overrun_ms(comment: str) -> float:
+    m = OVERRUN_RE.search(comment)
+    return float(m.group(1)) if m else math.nan
 
 
 def iter_games(path: Path) -> Iterator[chess.pgn.Game]:
@@ -378,8 +393,6 @@ def game_row(game: chess.pgn.Game, engine_key: str, book_moves: dict[int, str]
     """One game as a row. ``book_moves`` maps line_index -> moves_uci for the
     game's position (book lines are matched by round, then checked)."""
     h = game.headers
-    board = game.board()
-    pos_id = get_position_id(h.get("FEN", ""))
     played_book: list[str] = []
     stats = {chess.WHITE: [], chess.BLACK: []}
     last_comment = ""
@@ -399,47 +412,8 @@ def game_row(game: chess.pgn.Game, engine_key: str, book_moves: dict[int, str]
         last_comment = comment
         plies += 1
 
-    rnd = int(h.get("Round", "0") or 0)
-    n_lines = len(book_moves)
-    line_index = (rnd - 1) % n_lines if n_lines and rnd > 0 else -1
-    book_str = " ".join(played_book)
-    line_match = book_moves.get(line_index) == book_str
-    if not line_match:
-        matches = [i for i, mv in book_moves.items() if mv == book_str]
-        line_index = matches[0] if matches else -1
-
-    white_label = h.get("White", "")
-    result = h.get("Result", "*")
-
-    def mean(side: chess.Color, key: str) -> float:
-        vals = [x[key] for x in stats[side] if x[key] is not None]
-        return float(sum(vals) / len(vals)) if vals else math.nan
-
-    return {
-        "engine": engine_key,
-        "position_id": pos_id,
-        "line_index": line_index,
-        "line_matched_by_round": line_match,
-        "round": rnd,
-        "white_player": white_label,
-        "result": result,
-        "score_white": RESULT_WHITE.get(result, math.nan),
-        "termination": h.get("Termination", ""),
-        "end_reason": end_reason(last_comment) or "",
-        "plies": plies,
-        "book_plies": len(played_book),
-        "first_eval_white_cp": first_eval_white,
-        "mean_depth_white": mean(chess.WHITE, "depth"),
-        "mean_depth_black": mean(chess.BLACK, "depth"),
-        "mean_nodes_white": mean(chess.WHITE, "nodes"),
-        "mean_nodes_black": mean(chess.BLACK, "nodes"),
-        "time_used_white": sum(x["time"] for x in stats[chess.WHITE]),
-        "time_used_black": sum(x["time"] for x in stats[chess.BLACK]),
-        "duration": h.get("GameDuration", ""),
-        "start_time": h.get("GameStartTime", ""),
-        "time_control": h.get("TimeControl", ""),
-        "engine_id_name": h.get("EngineWhiteName", ""),
-    }
+    return _row(h, engine_key, book_moves, played_book, stats, first_eval_white,
+                last_comment, plies)
 
 
 # Fast parsing: fastchess's PGNs are machine-written and every move carries a
@@ -516,6 +490,7 @@ def _row(h: dict[str, str], engine_key: str, book_moves: dict[int, str],
         "score_white": RESULT_WHITE.get(result, math.nan),
         "termination": h.get("Termination", ""),
         "end_reason": end_reason(last_comment) or "",
+        "time_overrun_ms": time_overrun_ms(last_comment),
         "plies": plies,
         "book_plies": len(played_book),
         "first_eval_white_cp": first_eval_white,

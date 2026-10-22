@@ -16,11 +16,12 @@
 #       jobs/selfplay_array.slurm
 #
 # Settings come from config/selfplay.toml (time control, games per line,
-# adjudication). At 10+0.1 a game takes very roughly 25-35 s of one core, so
-# a position's 500 games take about 15 minutes on 16 cores and a block of 10
-# positions about 2.5-3 hours; the pilot measures it (the log prints each
-# position's time). With POSITIONS_PER_TASK=10 the 960 positions need array
-# indices 0-95; if you change it, change --array to match.
+# adjudication). In the pilot (16 cores per task), a position's 500 games took
+# 750-1000 s for Stockfish (mean 876) and 880-1020 s for Caissa (mean 943), so
+# a block of 10 positions takes about 2.5-2.8 hours; the 4-hour limit leaves a
+# margin and short limits help backfill. The log prints progress every
+# 5 minutes and each position's time. With POSITIONS_PER_TASK=10 the 960
+# positions need array indices 0-95; if you change it, change --array to match.
 # Finished positions are skipped, so resubmitting the same job resumes it.
 #
 # Timing matters for time-control games, so each game gets a whole physical
@@ -32,7 +33,7 @@
 #SBATCH --cpus-per-task=16
 #SBATCH --hint=nomultithread
 #SBATCH --mem=8G
-#SBATCH --time=06:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=logs/selfplay_%A_%a.out
 
 set -euo pipefail
