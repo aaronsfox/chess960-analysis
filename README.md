@@ -33,6 +33,7 @@ code/
   evaluate_sp.py    evaluate starting positions and collect results
   opening_book_generator.py  build the self-play opening book
   selfplay.py       engine self-play games with fastchess, and their tables
+  analyse_sp.py     Part I analysis: balance, stability, agreement
   plot_boards.py    board diagrams for figures
 tools/fastchess/    build script for fastchess (the match runner); bin/ not committed
 jobs/               SLURM job scripts (CPU engines; Lc0 on GPU)
@@ -231,6 +232,31 @@ On the cluster: `sbatch --export=ALL,ENGINE=stockfish jobs/selfplay_array.slurm`
 The PGNs, tables and run records are all committed. The PGNs come to about
 0.7 GB per engine (one ~0.7 MB file per position), so push one engine at a
 time: GitHub refuses a single push over 2 GB.
+
+## Part I analysis (analyse_sp.py)
+
+```bash
+python code/analyse_sp.py
+```
+
+Reads `results/evaluate_sp/tables/evaluate_sp_final.parquet` and answers the
+three Part I questions:
+
+1. **Balance:** White's expected score (E) and Elo-equivalent advantage (Δ)
+   at each engine's top budget for Stockfish, Caissa and Lc0: distribution,
+   ranking, practically balanced positions (|Δ| ≤ 5 Elo) and where #518 sits.
+2. **Stability:** the change in E and Δ between successive tenfold budgets.
+   Convergence means the changes shrink as the budget rises; a step is stable
+   if it changes Δ by at most 5 Elo. Each position's stabilisation budget is
+   the lowest budget from which every further step is stable (none if the
+   final step is not).
+3. **Agreement:** Spearman correlations between all four engines' top-budget
+   centipawn evaluations, with 2,000-resample bootstrap intervals (PlentyChess
+   has no win/draw/loss output, so it appears only here).
+
+Tables go to `results/evaluate_sp/analysis/` (`part1_*.csv`, plus
+`part1_summary.txt` with the key numbers) and figures to `results/figures/`
+(`part1_balance`, `part1_stability`, `part1_agreement`, as PDF and PNG).
 
 ## Figures
 

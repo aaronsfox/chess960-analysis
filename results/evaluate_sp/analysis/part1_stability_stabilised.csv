@@ -1,0 +1,18 @@
+engine,budget_nodes,n_stabilised,pct_stabilised,note
+stockfish,10000,72,7.5,
+stockfish,100000,156,16.25,
+stockfish,1000000,292,30.4167,
+stockfish,10000000,439,45.7292,
+stockfish,100000000,673,70.1042,
+stockfish,-1,287,29.8958,not stabilised (final step > 5 Elo)
+caissa,10000,14,1.45833,
+caissa,100000,49,5.10417,
+caissa,1000000,102,10.625,
+caissa,10000000,216,22.5,
+caissa,100000000,423,44.0625,
+caissa,-1,537,55.9375,not stabilised (final step > 5 Elo)
+lc0,100,409,42.6042,
+lc0,1000,488,50.8333,
+lc0,10000,628,65.4167,
+lc0,100000,777,80.9375,
+lc0,-1,183,19.0625,not stabilised (final step > 5 Elo)

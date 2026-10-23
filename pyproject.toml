@@ -9,10 +9,11 @@ dependencies = [
     "numpy>=1.26",
     "pandas>=2.2",
     "pyarrow>=15",
+    "scipy>=1.11",
 ]
 
 [project.optional-dependencies]
-# Figures (code/plot_boards.py); cairosvg needs the cairo library installed.
+# Figures (code/plot_boards.py, code/analyse_sp.py); cairosvg needs the cairo library installed.
 figures = ["matplotlib>=3.8", "cairosvg>=2.7"]
 
 [dependency-groups]

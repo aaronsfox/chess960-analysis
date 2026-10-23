@@ -1,0 +1,7 @@
+engine_a,engine_b,spearman,ci_low,ci_high,positions,median_abs_rank_difference
+stockfish,caissa,0.618687,0.577197,0.657939,960,149
+stockfish,lc0,0.813319,0.787775,0.834678,960,102
+stockfish,plentychess,0.497235,0.442994,0.545244,960,168.5
+caissa,lc0,0.663703,0.624302,0.701096,960,136.75
+caissa,plentychess,0.452502,0.395717,0.499988,960,186.25
+lc0,plentychess,0.520438,0.467848,0.567246,960,166.25
