@@ -284,6 +284,19 @@ def agreement(top: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def agreement_matrix(agree: pd.DataFrame) -> pd.DataFrame:
+    """Lower-triangle table of Spearman's rho [95% CI]: rows and columns are
+    engines; only the pairs below the diagonal are filled."""
+    labels = [ENGINES[e].label for e in ALL_ENGINES]
+    mat = pd.DataFrame("", index=labels, columns=labels)
+    for r in agree.itertuples():
+        i, j = ALL_ENGINES.index(r.engine_a), ALL_ENGINES.index(r.engine_b)
+        row, col = labels[max(i, j)], labels[min(i, j)]
+        mat.loc[row, col] = f"{r.spearman:.2f} [{r.ci_low:.2f}, {r.ci_high:.2f}]"
+    # Drop the empty first row and last column of a lower triangle.
+    return mat.iloc[1:, :-1]
+
+
 # ---------------------------------------------------------------------------
 # Figures: one plot per file, each for E_score and for Delta_Elo
 # ---------------------------------------------------------------------------
@@ -459,7 +472,32 @@ def figure_agreement(agree: pd.DataFrame, out_dir: Path) -> list[Path]:
     return finish(fig, ax, "evaluate_sp_agreement_spearman", out_dir)
 
 
-def all_figures(ranking, steps, budgets, counts, agree, out_dir: Path) -> list[Path]:
+def figure_scatter(top: pd.DataFrame, agree: pd.DataFrame, a: str, b: str,
+                   out_dir: Path) -> list[Path]:
+    """Top-budget centipawn evaluations of one engine against another, one
+    point per position; #518 ringed, dotted line of equality, rho noted."""
+    plt = apply_style()
+    cp = top.pivot(index="position_id", columns="engine", values="cp_white")
+    fig, ax = plt.subplots(figsize=(3.0, 3.0))
+    lo = min(cp[a].min(), cp[b].min()) - 5
+    hi = max(cp[a].max(), cp[b].max()) + 5
+    ax.plot([lo, hi], [lo, hi], color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=1)
+    ax.scatter(cp[a], cp[b], s=9, color="#222222", alpha=0.35, lw=0, zorder=2)
+    std = cp.loc[STANDARD_POSITION_ID]
+    ax.scatter(std[a], std[b], s=46, facecolor="none", edgecolor="#222222", lw=1.2, zorder=3)
+    row = agree[((agree.engine_a == a) & (agree.engine_b == b))
+                | ((agree.engine_a == b) & (agree.engine_b == a))].iloc[0]
+    ax.text(0.04, 0.96, f"ρ = {row.spearman:.2f}", transform=ax.transAxes, ha="left", va="top",
+            fontsize=8, fontweight="bold")
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(lo, hi)
+    ax.set_aspect("equal")
+    ax.set_xlabel(f"{ENGINES[a].label} evaluation (cp)")
+    ax.set_ylabel(f"{ENGINES[b].label} evaluation (cp)")
+    return finish(fig, ax, f"evaluate_sp_agreement_scatter_{a}_{b}", out_dir)
+
+
+def all_figures(ranking, steps, budgets, counts, agree, out_dir: Path, top=None) -> list[Path]:
     paths: list[Path] = []
     for metric in METRICS:
         paths += figure_ranked(ranking, metric, out_dir)
@@ -468,6 +506,9 @@ def all_figures(ranking, steps, budgets, counts, agree, out_dir: Path) -> list[P
         paths += figure_budgets(budgets, metric, out_dir)
     paths += figure_stabilised(counts, out_dir)
     paths += figure_agreement(agree, out_dir)
+    if top is not None:
+        for a, b in itertools.combinations(ALL_ENGINES, 2):
+            paths += figure_scatter(top, agree, a, b, out_dir)
     return paths
 
 
@@ -556,11 +597,12 @@ def main(argv: list[str] | None = None) -> int:
     }
     for name, table in outputs.items():
         table.to_csv(out / name, index=False, float_format="%.6g")
+    agreement_matrix(agree).to_csv(out / "evaluate_sp_agreement_matrix.csv")
     text = summary_text(bal, steps, budgets, counts, agree)
     (out / "evaluate_sp_summary.txt").write_text(text)
     print(text)
     if not args.no_figures:
-        paths = all_figures(ranking, steps, budgets, counts, agree, Path(args.figures_dir))
+        paths = all_figures(ranking, steps, budgets, counts, agree, Path(args.figures_dir), top=top)
         print(f"wrote {len(paths) // 2} figures (PDF and PNG) to {args.figures_dir}")
     return 0
 

@@ -257,7 +257,8 @@ three questions about the starting positions, using White's expected score
    has no win/draw/loss output, so it appears only here).
 
 Tables go to `results/evaluate_sp/analysis/` (`evaluate_sp_*.csv`, plus
-`evaluate_sp_summary.txt` with the key numbers) and figures, one plot per
+`evaluate_sp_summary.txt` with the key numbers and
+`evaluate_sp_agreement_matrix.csv`, a lower-triangle table of ρ [95% CI]) and figures, one plot per
 file as PDF and PNG, to `results/figures/`:
 
 | Figure | Versions |
@@ -268,6 +269,7 @@ file as PDF and PNG, to `results/figures/`:
 | `evaluate_sp_stability_budgets_<metric>` | median advantage at each budget (IQR shaded) |
 | `evaluate_sp_stability_stabilised_delta_elo` | positions stable from each budget on |
 | `evaluate_sp_agreement_spearman` | Spearman matrix with 95% intervals |
+| `evaluate_sp_agreement_scatter_<a>_<b>` | top-budget centipawns of engine a against b (all six pairs), #518 ringed, line of equality |
 
 `<metric>` is `escore` or `delta_elo`. Stabilisation is defined on
 $\Delta_{\text{Elo}}$ and Spearman correlations on ranks, so those two
