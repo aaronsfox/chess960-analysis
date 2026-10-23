@@ -301,7 +301,8 @@ def finish(fig, ax, name: str, out_dir: Path) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = [out_dir / f"{name}.pdf", out_dir / f"{name}.png"]
     for p in paths:
-        fig.savefig(p)
+        # No creation date in the PDF, so unchanged figures stay byte-identical.
+        fig.savefig(p, metadata={"CreationDate": None} if p.suffix == ".pdf" else None)
     import matplotlib.pyplot as plt
     plt.close(fig)
     return paths
@@ -372,7 +373,6 @@ def figure_step_change(steps: pd.DataFrame, metric: str, out_dir: Path) -> list[
     ax.set_xscale("log")
     ref = STABLE_ELO if metric == "delta_elo" else STABLE_ESCORE_AT_EVEN
     ax.axhline(ref, color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)))
-    ref_label = "5 Elo" if metric == "delta_elo" else "≈5 Elo"
     for engine in WDL_ENGINES:
         s = ENGINES[engine]
         g = steps[steps.engine == engine]
@@ -380,7 +380,8 @@ def figure_step_change(steps: pd.DataFrame, metric: str, out_dir: Path) -> list[
                         color=s.colour, alpha=0.12, lw=0)
         ax.plot(g.to_budget, g[f"abs_change_{metric}_median"], color=s.colour, ls=s.linestyle,
                 marker=s.marker, label=s.label)
-    ax.text(1.1e9, ref, ref_label, ha="right", va="top", fontsize=7, color=MUTED_TEXT)
+    if metric == "escore":   # the Delta_Elo version leaves the line unlabelled
+        ax.text(1.1e9, ref, "≈5 Elo", ha="right", va="top", fontsize=7, color=MUTED_TEXT)
     ax.set_ylim(bottom=0)
     ax.set_xlabel("Search budget (nodes)")
     ax.set_ylabel(f"|Change in {m.bold_symbol}|")
