@@ -326,40 +326,41 @@ def figure_ranked(ranking: pd.DataFrame, metric: str, out_dir: Path) -> list[Pat
         ax.plot(p["rank"], p[metric], marker=s.marker, ms=6, color=s.colour, mec="white",
                 mew=1.0, ls="none", zorder=4)
     ax.text(15, (lo + hi) / 2, "Practically balanced", va="center", fontsize=7, color=MUTED_TEXT)
-    ax.plot([], [], marker="o", color=MUTED_TEXT, ls="none", ms=5, label="#518")
     ax.set_xlim(0, 961)
     ax.set_xlabel("Rank (1 = largest advantage for White)")
     ax.set_ylabel(m.axis_label)
-    ax.legend(loc="upper right")
     return finish(fig, ax, f"evaluate_sp_balance_ranked_{metric}", out_dir)
 
 
 def figure_distribution(ranking: pd.DataFrame, metric: str, out_dir: Path) -> list[Path]:
-    """Kernel density of the advantage across positions, #518 marked."""
+    """Kernel density of the advantage across positions, each engine's curve
+    truncated to the range of its observed values; #518 marked."""
     plt = apply_style()
     m = METRICS[metric]
     fig, ax = new_axes(plt)
     lo, hi = balanced_band(metric)
     ax.axvspan(lo, hi, color=BAND_COLOUR, lw=0, zorder=0)
     values = ranking[ranking.engine.isin(WDL_ENGINES)][metric]
-    pad = 0.1 * (values.max() - values.min())
-    grid = np.linspace(values.min() - pad, values.max() + pad, 600)
+    pad = 0.02 * (values.max() - values.min())
+    grid = np.array([values.min() - pad, values.max() + pad])   # x-axis limits
     for engine in WDL_ENGINES:
         s = ENGINES[engine]
         g = ranking[ranking.engine == engine]
-        density = stats.gaussian_kde(g[metric].to_numpy())(grid)
-        ax.fill_between(grid, density, color=s.colour, alpha=0.12, lw=0)
-        ax.plot(grid, density, color=s.colour, ls=s.linestyle, label=s.label)
+        x = g[metric].to_numpy()
+        kde = stats.gaussian_kde(x)
+        # Drawn only over the range of the observed values (truncated).
+        grid_e = np.linspace(x.min(), x.max(), 600)
+        density = kde(grid_e)
+        ax.fill_between(grid_e, density, color=s.colour, alpha=0.12, lw=0)
+        ax.plot(grid_e, density, color=s.colour, ls=s.linestyle, label=s.label)
         p = g[g.position_id == STANDARD_POSITION_ID].iloc[0]
-        y = stats.gaussian_kde(g[metric].to_numpy())(p[metric])[0]
+        y = kde(p[metric])[0]
         ax.plot(p[metric], y, marker=s.marker, ms=6, color=s.colour, mec="white", mew=1.0,
                 ls="none", zorder=4)
-    ax.plot([], [], marker="o", color=MUTED_TEXT, ls="none", ms=5, label="#518")
     ax.set_xlim(grid[0], grid[-1])
     ax.set_ylim(bottom=0)
     ax.set_xlabel(m.axis_label)
     ax.set_ylabel("Density")
-    ax.legend(loc="upper right")
     return finish(fig, ax, f"evaluate_sp_balance_distribution_{metric}", out_dir)
 
 
@@ -379,11 +380,10 @@ def figure_step_change(steps: pd.DataFrame, metric: str, out_dir: Path) -> list[
                         color=s.colour, alpha=0.12, lw=0)
         ax.plot(g.to_budget, g[f"abs_change_{metric}_median"], color=s.colour, ls=s.linestyle,
                 marker=s.marker, label=s.label)
-    ax.text(1.4e9, ref, ref_label, va="center", fontsize=7, color=MUTED_TEXT)
+    ax.text(1.1e9, ref, ref_label, ha="right", va="top", fontsize=7, color=MUTED_TEXT)
     ax.set_ylim(bottom=0)
-    ax.set_xlabel("Search budget after tenfold increase (nodes)")
-    ax.set_ylabel(f"|Change in {m.bold_symbol}|" + (f" ({m.unit})" if m.unit else ""))
-    ax.legend(loc="upper right")
+    ax.set_xlabel("Search budget (nodes)")
+    ax.set_ylabel(f"|Change in {m.bold_symbol}|")
     return finish(fig, ax, f"evaluate_sp_stability_step_change_{metric}", out_dir)
 
 
@@ -404,9 +404,6 @@ def figure_budgets(budgets: pd.DataFrame, metric: str, out_dir: Path) -> list[Pa
                 marker=s.marker, label=s.label)
     ax.set_xlabel("Search budget (nodes)")
     ax.set_ylabel(m.axis_label)
-    ax.legend(loc="upper right", ncol=3, columnspacing=1.0, handlelength=1.8)
-    ymin, ymax = ax.get_ylim()
-    ax.set_ylim(ymin, ymax + 0.18 * (ymax - ymin))
     return finish(fig, ax, f"evaluate_sp_stability_budgets_{metric}", out_dir)
 
 
@@ -424,7 +421,6 @@ def figure_stabilised(counts: pd.DataFrame, out_dir: Path) -> list[Path]:
     ax.set_ylim(0, 100)
     ax.set_xlabel("Search budget (nodes)")
     ax.set_ylabel(f"Positions stable from budget (%)")
-    ax.legend(loc="upper left")
     return finish(fig, ax, "evaluate_sp_stability_stabilised_delta_elo", out_dir)
 
 

@@ -263,7 +263,7 @@ file as PDF and PNG, to `results/figures/`:
 | Figure | Versions |
 | --- | --- |
 | `evaluate_sp_balance_ranked_<metric>` | advantage against rank, #518 marked |
-| `evaluate_sp_balance_distribution_<metric>` | kernel density across positions, #518 marked |
+| `evaluate_sp_balance_distribution_<metric>` | kernel density across positions, truncated to the observed range, #518 marked |
 | `evaluate_sp_stability_step_change_<metric>` | median absolute change per tenfold step (IQR shaded) |
 | `evaluate_sp_stability_budgets_<metric>` | median advantage at each budget (IQR shaded) |
 | `evaluate_sp_stability_stabilised_delta_elo` | positions stable from each budget on |
@@ -273,8 +273,8 @@ file as PDF and PNG, to `results/figures/`:
 $\Delta_{\text{Elo}}$ and Spearman correlations on ranks, so those two
 figures have one version each.
 
-All figures take their style from `code/plot_style.py`: Arial (Liberation
-Sans where Arial isn't installed), bold axis and tick labels, inward ticks,
+Figures have no legends (engines and markers are explained in the captions). All figures take their style from `code/plot_style.py`: Arial (Liberation
+Sans where Arial isn't installed), bold axis labels (7 pt) and tick labels (8 pt), inward ticks,
 no gridlines, the metric labels, and each engine's colour, marker and line
 style (Stockfish #104485, circle, solid; Caissa #f17f03, square, dashed;
 Lc0 #418c47, triangle, dotted; PlentyChess #b63667, diamond, dash-dot).

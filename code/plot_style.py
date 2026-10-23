@@ -53,7 +53,7 @@ METRICS: dict[str, MetricStyle] = {
     "escore": MetricStyle("escore", r"$E_{\mathrm{score}}$",
                           r"$\mathbf{E_{score}}$", "", "expected score"),
     "delta_elo": MetricStyle("delta_elo", r"$\Delta_{\mathrm{Elo}}$",
-                             r"$\mathbf{\Delta_{Elo}}$", "Elo", "Elo-equivalent advantage"),
+                             r"$\mathbf{\Delta_{Elo}}$", "", "Elo-equivalent advantage"),
 }
 LATEX = {"escore": r"$E_{\text{score}}$", "delta_elo": r"$\Delta_{\text{Elo}}$"}
 
@@ -65,7 +65,7 @@ RC_PARAMS = {
     "font.size": 9,
     "font.weight": "bold",
     "axes.labelweight": "bold",
-    "axes.labelsize": 9,
+    "axes.labelsize": 7,   # 2 pt smaller than the 9 pt base
     "axes.titleweight": "bold",
     "axes.titlesize": 9,
     "axes.linewidth": 0.8,
