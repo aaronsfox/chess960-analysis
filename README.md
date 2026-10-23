@@ -254,9 +254,9 @@ three Part I questions:
    centipawn evaluations, with 2,000-resample bootstrap intervals (PlentyChess
    has no win/draw/loss output, so it appears only here).
 
-Tables go to `results/evaluate_sp/analysis/` (`part1_*.csv`, plus
-`part1_summary.txt` with the key numbers) and figures to `results/figures/`
-(`part1_balance`, `part1_stability`, `part1_agreement`, as PDF and PNG).
+Tables go to `results/evaluate_sp/analysis/` (`evaluate_sp_*.csv`, plus
+`evaluate_sp_summary.txt` with the key numbers) and figures to `results/figures/`
+(`evaluate_sp_balance`, `evaluate_sp_stability`, `evaluate_sp_agreement`, as PDF and PNG).
 
 ## Figures
 

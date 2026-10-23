@@ -18,7 +18,7 @@ Three questions, from the evaluations collected by evaluate_sp.py
    (PlentyChess has no win/draw/loss output, so it appears only here).
 
 Writes tables to results/evaluate_sp/analysis/ and figures to
-results/figures/ (part1_balance, part1_stability, part1_agreement; PDF and
+results/figures/ (evaluate_sp_balance, evaluate_sp_stability, evaluate_sp_agreement; PDF and
 PNG), plus a plain-text summary of the key numbers.
 
     python code/analyse_sp.py
@@ -336,7 +336,7 @@ def figure_balance(ranking: pd.DataFrame, out_dir: Path):
     ax2.legend(frameon=False, loc="center right")
     panel_letter(ax1, "a")
     panel_letter(ax2, "b")
-    paths = save(fig, "part1_balance", out_dir)
+    paths = save(fig, "evaluate_sp_balance", out_dir)
     plt.close(fig)
     return paths
 
@@ -377,7 +377,7 @@ def figure_stability(steps: pd.DataFrame, budgets: pd.DataFrame, counts: pd.Data
     ax3.set_ylim(0, 100)
     for ax, letter in zip(axes, "abc"):
         panel_letter(ax, letter)
-    paths = save(fig, "part1_stability", out_dir)
+    paths = save(fig, "evaluate_sp_stability", out_dir)
     plt.close(fig)
     return paths
 
@@ -409,7 +409,7 @@ def figure_agreement(agree: pd.DataFrame, out_dir: Path):
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cb.set_label("Spearman's ρ (top-budget centipawns)")
     cb.outline.set_visible(False)
-    paths = save(fig, "part1_agreement", out_dir)
+    paths = save(fig, "evaluate_sp_agreement", out_dir)
     plt.close(fig)
     return paths
 
@@ -483,18 +483,18 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.tables_dir)
     out.mkdir(parents=True, exist_ok=True)
     outputs = {
-        "part1_balance_summary.csv": bal,
-        "part1_balance_ranking.csv": ranking,
-        "part1_stability_steps.csv": steps,
-        "part1_stability_budgets.csv": budgets,
-        "part1_stability_positions.csv": pos,
-        "part1_stability_stabilised.csv": counts,
-        "part1_agreement_spearman.csv": agree,
+        "evaluate_sp_balance_summary.csv": bal,
+        "evaluate_sp_balance_ranking.csv": ranking,
+        "evaluate_sp_stability_steps.csv": steps,
+        "evaluate_sp_stability_budgets.csv": budgets,
+        "evaluate_sp_stability_positions.csv": pos,
+        "evaluate_sp_stability_stabilised.csv": counts,
+        "evaluate_sp_agreement_spearman.csv": agree,
     }
     for name, table in outputs.items():
         table.to_csv(out / name, index=False, float_format="%.6g")
     text = summary_text(bal, steps, budgets, counts, agree)
-    (out / "part1_summary.txt").write_text(text)
+    (out / "evaluate_sp_summary.txt").write_text(text)
     print(text)
     if not args.no_figures:
         fig_dir = Path(args.figures_dir)
