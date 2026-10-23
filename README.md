@@ -33,7 +33,8 @@ code/
   evaluate_sp.py    evaluate starting positions and collect results
   opening_book_generator.py  build the self-play opening book
   selfplay.py       engine self-play games with fastchess, and their tables
-  analyse_sp.py     Part I analysis: balance, stability, agreement
+  analyse_sp.py     starting-position analysis: balance, stability, agreement
+  plot_style.py     shared figure style: fonts, engine colours/markers/lines, metric labels
   plot_boards.py    board diagrams for figures
 tools/fastchess/    build script for fastchess (the match runner); bin/ not committed
 jobs/               SLURM job scripts (CPU engines; Lc0 on GPU)
@@ -233,30 +234,50 @@ The PGNs, tables and run records are all committed. The PGNs come to about
 0.7 GB per engine (one ~0.7 MB file per position), so push one engine at a
 time: GitHub refuses a single push over 2 GB.
 
-## Part I analysis (analyse_sp.py)
+## Starting-position analysis (analyse_sp.py)
 
 ```bash
 python code/analyse_sp.py
 ```
 
 Reads `results/evaluate_sp/tables/evaluate_sp_final.parquet` and answers the
-three Part I questions:
+three questions about the starting positions, using White's expected score
+($E_{\text{score}}$) and its Elo-equivalent advantage ($\Delta_{\text{Elo}}$):
 
-1. **Balance:** White's expected score (E) and Elo-equivalent advantage (Δ)
-   at each engine's top budget for Stockfish, Caissa and Lc0: distribution,
-   ranking, practically balanced positions (|Δ| ≤ 5 Elo) and where #518 sits.
-2. **Stability:** the change in E and Δ between successive tenfold budgets.
-   Convergence means the changes shrink as the budget rises; a step is stable
-   if it changes Δ by at most 5 Elo. Each position's stabilisation budget is
-   the lowest budget from which every further step is stable (none if the
-   final step is not).
+1. **Balance:** $E_{\text{score}}$ and $\Delta_{\text{Elo}}$ at each engine's top
+   budget for Stockfish, Caissa and Lc0: distribution, ranking, practically
+   balanced positions ($\Delta_{\text{Elo}}$ within ±5) and where #518 sits.
+2. **Stability:** the change in $E_{\text{score}}$ and $\Delta_{\text{Elo}}$
+   between successive tenfold budgets. Convergence means the changes shrink
+   as the budget rises; a step is stable if it changes $\Delta_{\text{Elo}}$ by
+   at most 5. Each position's stabilisation budget is the lowest budget from
+   which every further step is stable (none if the final step is not).
 3. **Agreement:** Spearman correlations between all four engines' top-budget
    centipawn evaluations, with 2,000-resample bootstrap intervals (PlentyChess
    has no win/draw/loss output, so it appears only here).
 
 Tables go to `results/evaluate_sp/analysis/` (`evaluate_sp_*.csv`, plus
-`evaluate_sp_summary.txt` with the key numbers) and figures to `results/figures/`
-(`evaluate_sp_balance`, `evaluate_sp_stability`, `evaluate_sp_agreement`, as PDF and PNG).
+`evaluate_sp_summary.txt` with the key numbers) and figures, one plot per
+file as PDF and PNG, to `results/figures/`:
+
+| Figure | Versions |
+| --- | --- |
+| `evaluate_sp_balance_ranked_<metric>` | advantage against rank, #518 marked |
+| `evaluate_sp_balance_distribution_<metric>` | kernel density across positions, #518 marked |
+| `evaluate_sp_stability_step_change_<metric>` | median absolute change per tenfold step (IQR shaded) |
+| `evaluate_sp_stability_budgets_<metric>` | median advantage at each budget (IQR shaded) |
+| `evaluate_sp_stability_stabilised_delta_elo` | positions stable from each budget on |
+| `evaluate_sp_agreement_spearman` | Spearman matrix with 95% intervals |
+
+`<metric>` is `escore` or `delta_elo`. Stabilisation is defined on
+$\Delta_{\text{Elo}}$ and Spearman correlations on ranks, so those two
+figures have one version each.
+
+All figures take their style from `code/plot_style.py`: Arial (Liberation
+Sans where Arial isn't installed), bold axis and tick labels, inward ticks,
+no gridlines, the metric labels, and each engine's colour, marker and line
+style (Stockfish #104485, circle, solid; Caissa #f17f03, square, dashed;
+Lc0 #418c47, triangle, dotted; PlentyChess #b63667, diamond, dash-dot).
 
 ## Figures
 
