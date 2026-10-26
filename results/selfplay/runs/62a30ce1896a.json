@@ -1,0 +1,155 @@
+{
+  "run_id": "62a30ce1896a",
+  "engine": "stockfish",
+  "engine_name": "Stockfish",
+  "engine_version": "19",
+  "binary_sha256": "0f83d24cc46d2c66c60f16001af5444873bc112b7d028594513426894c12da19",
+  "network_sha256": null,
+  "uci_options": {
+    "Threads": 1,
+    "Hash": 64,
+    "UCI_ShowWDL": true
+  },
+  "fastchess_version": "fastchess alpha 1.8.2",
+  "fastchess_sha256": "49a6d83b904e37b4bc3533505dc15e0ba485020d9edcd463d82128c58cc1dd8d",
+  "settings": {
+    "tc": "10+0.1",
+    "games_per_line": 10,
+    "fastchess": "/home/remote/aafox/chess960-analysis/tools/fastchess/bin/fastchess",
+    "draw": {
+      "movenumber": 40,
+      "movecount": 8,
+      "score": 10
+    },
+    "resign": {
+      "movecount": 5,
+      "score": 1000,
+      "twosided": true
+    },
+    "maxmoves": 0,
+    "timemargin_ms": 100,
+    "tablebases": "",
+    "tbpieces": 5,
+    "uci_overrides": {
+      "Threads": 1,
+      "Hash": 64
+    }
+  },
+  "book": "results/opening_book/book/opening_book_lines.parquet",
+  "book_sha256": "5a7dff1c988abb17b316328ce0b571d37dbaa24511d7f94d60238ce7a3eb3d59",
+  "concurrency": 16,
+  "positions": [
+    480,
+    481,
+    482,
+    483,
+    484,
+    485,
+    486,
+    487,
+    488,
+    489
+  ],
+  "started": "2026-10-23T22:56:40+00:00",
+  "command_example": [
+    "/home/remote/aafox/chess960-analysis/tools/fastchess/bin/fastchess",
+    "-variant",
+    "fischerandom",
+    "-engine",
+    "cmd=/home/remote/aafox/chess960-analysis/engines/stockfish/bin/stockfish",
+    "name=stockfish_a",
+    "dir=/home/remote/aafox/chess960-analysis/engines/stockfish/bin",
+    "option.Threads=1",
+    "option.Hash=64",
+    "option.UCI_ShowWDL=true",
+    "-engine",
+    "cmd=/home/remote/aafox/chess960-analysis/engines/stockfish/bin/stockfish",
+    "name=stockfish_b",
+    "dir=/home/remote/aafox/chess960-analysis/engines/stockfish/bin",
+    "option.Threads=1",
+    "option.Hash=64",
+    "option.UCI_ShowWDL=true",
+    "-each",
+    "tc=10+0.1",
+    "proto=uci",
+    "timemargin=100",
+    "-openings",
+    "file=openings.pgn",
+    "format=pgn",
+    "order=sequential",
+    "-rounds",
+    "250",
+    "-repeat",
+    "-concurrency",
+    "16",
+    "-recover",
+    "-ratinginterval",
+    "0",
+    "-autosaveinterval",
+    "0",
+    "-pgnout",
+    "file=games.pgn",
+    "notation=san",
+    "nodes=true",
+    "seldepth=true",
+    "-draw",
+    "movenumber=40",
+    "movecount=8",
+    "score=10",
+    "-resign",
+    "movecount=5",
+    "score=1000",
+    "twosided=true"
+  ],
+  "platform": "linux",
+  "os": "Linux-5.15.0-160-generic-x86_64-with-glibc2.35",
+  "hostname": "hpc-gc-b-1",
+  "cpu": "Intel(R) Xeon(R) Gold 6240R CPU @ 2.40GHz",
+  "gpu": "",
+  "python": "3.12.3",
+  "python_chess": "1.11.2",
+  "finished": "2026-10-24T01:17:00+00:00",
+  "position_results": {
+    "480": {
+      "games": 500,
+      "seconds": 868.3
+    },
+    "481": {
+      "games": 500,
+      "seconds": 815.3
+    },
+    "482": {
+      "games": 500,
+      "seconds": 817.3
+    },
+    "483": {
+      "games": 500,
+      "seconds": 777.3
+    },
+    "484": {
+      "games": 500,
+      "seconds": 887.3
+    },
+    "485": {
+      "games": 500,
+      "seconds": 805.3
+    },
+    "486": {
+      "games": 500,
+      "seconds": 864.4
+    },
+    "487": {
+      "games": 500,
+      "seconds": 879.3
+    },
+    "488": {
+      "games": 500,
+      "seconds": 847.3
+    },
+    "489": {
+      "games": 500,
+      "seconds": 840.3
+    }
+  },
+  "failed": []
+}
