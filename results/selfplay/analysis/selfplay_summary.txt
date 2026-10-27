@@ -1,0 +1,57 @@
+Self-play (selfplay): key numbers
+=================================
+
+0. Quality checks and design effect
+  Caissa: 960 positions, 480000 games (500-500 per position), unmatched lines 0, losses on time 0; W/D/L 12.5/82.6/4.9%; copies as White 0.5376 vs 0.5379; ICC 0.083, DEFF 1.75 (book-adjusted 1.65); line score on book drift slope 1.14 (r 0.11); max |position mean drift| 0.0073
+  Stockfish: 960 positions, 480000 games (500-500 per position), unmatched lines 0, losses on time 0; W/D/L 7.6/90.4/2.0%; copies as White 0.5281 vs 0.5278; ICC 0.071, DEFF 1.64 (book-adjusted 1.49); line score on book drift slope 1.06 (r 0.13); max |position mean drift| 0.0073
+
+1a. Self-play against top-budget evaluations (Pearson r [corrected for self-play noise], slope)
+  Stockfish games ~ Stockfish evaluation (escore): r 0.66 [0.72], rho 0.53, slope 1.033 (SE 0.038), intercept -0.008, R2 0.44
+  Stockfish games ~ Stockfish evaluation (delta_elo): r 0.66 [0.72], rho 0.54, slope 1.036 (SE 0.038), intercept +6.215, R2 0.44
+  Stockfish games ~ Caissa evaluation (escore): r 0.51 [0.56], rho 0.45, slope 0.566 (SE 0.031), intercept +0.226, R2 0.26
+  Stockfish games ~ Caissa evaluation (delta_elo): r 0.51 [0.56], rho 0.45, slope 0.568 (SE 0.031), intercept +5.831, R2 0.26
+  Stockfish games ~ Lc0 evaluation (escore): r 0.68 [0.74], rho 0.61, slope 0.807 (SE 0.028), intercept +0.082, R2 0.46
+  Stockfish games ~ Lc0 evaluation (delta_elo): r 0.68 [0.74], rho 0.61, slope 0.805 (SE 0.028), intercept -10.017, R2 0.46
+  Stockfish games ~ PlentyChess evaluation (centipawns): r 0.39 [0.43], rho 0.32, slope 0.001 (SE 0.000), intercept +0.517, R2 0.16
+  Caissa games ~ Stockfish evaluation (escore): r 0.60 [0.69], rho 0.51, slope 1.055 (SE 0.045), intercept -0.009, R2 0.36
+  Caissa games ~ Stockfish evaluation (delta_elo): r 0.60 [0.69], rho 0.51, slope 1.061 (SE 0.045), intercept +12.791, R2 0.37
+  Caissa games ~ Caissa evaluation (escore): r 0.46 [0.53], rho 0.40, slope 0.566 (SE 0.036), intercept +0.235, R2 0.21
+  Caissa games ~ Caissa evaluation (delta_elo): r 0.46 [0.53], rho 0.40, slope 0.570 (SE 0.036), intercept +12.668, R2 0.21
+  Caissa games ~ Lc0 evaluation (escore): r 0.65 [0.75], rho 0.59, slope 0.872 (SE 0.033), intercept +0.056, R2 0.43
+  Caissa games ~ Lc0 evaluation (delta_elo): r 0.66 [0.75], rho 0.60, slope 0.871 (SE 0.032), intercept -5.553, R2 0.43
+  Caissa games ~ PlentyChess evaluation (centipawns): r 0.38 [0.44], rho 0.32, slope 0.001 (SE 0.000), intercept +0.525, R2 0.14
+
+1b. Posterior balance
+  Caissa: $E_{\text{score}}$ median 0.5338 (IQR 0.5201 to 0.5507); $\Delta_{\text{Elo}}$ median +23.5 (IQR +13.9 to +35.3; range -9.6 to +129.4; true SD 15.1); mean 95% interval width 33.1
+    P >= 0.80: favours White 774, balanced 0, favours Black 0, at least as fair as #518 6, more favourable to White than #518 593
+    P >= 0.95: favours White 626, balanced 0, favours Black 0, at least as fair as #518 0, more favourable to White than #518 372
+    expected counts (sum of probabilities): favours White 855, balanced 82, favours Black 23, at least as fair as #518 206
+    #518: $E_{\text{score}}$ 0.5160 [0.4993, 0.5334], $\Delta_{\text{Elo}}$ +11.0 [-0.5, +23.3], P(favours White) 0.85, rank 789/960; most unbalanced #879 ($\Delta_{\text{Elo}}$ +129.4)
+  Stockfish: $E_{\text{score}}$ median 0.5219 (IQR 0.5139 to 0.5369); $\Delta_{\text{Elo}}$ median +15.1 (IQR +9.5 to +25.5; range -8.2 to +109.1; true SD 14.1); mean 95% interval width 23.6
+    P >= 0.80: favours White 731, balanced 4, favours Black 0, at least as fair as #518 100, more favourable to White than #518 428
+    P >= 0.95: favours White 538, balanced 0, favours Black 0, at least as fair as #518 4, more favourable to White than #518 284
+    expected counts (sum of probabilities): favours White 820, balanced 127, favours Black 12, at least as fair as #518 321
+    #518: $E_{\text{score}}$ 0.5159 [0.5042, 0.5292], $\Delta_{\text{Elo}}$ +10.8 [+2.9, +20.3], P(favours White) 0.92, rank 664/960; most unbalanced #868 ($\Delta_{\text{Elo}}$ +109.1)
+
+2. Agreement between Stockfish and Caissa games
+  escore: Spearman 0.72 [0.68, 0.75], corrected for noise 0.90 (reliabilities 0.84, 0.76); mean difference (Caissa - Stockfish) +0.009736 [+0.00881, +0.01066], limits of agreement -0.01895 to +0.03842; difference-on-mean slope +0.129 (p 1.3e-09); medians 0.5219 vs 0.5338; true SD 0.02003 vs 0.02136
+  delta_elo: Spearman 0.72 [0.68, 0.75], corrected for noise 0.90 (reliabilities 0.84, 0.76); mean difference (Caissa - Stockfish) +6.883 [+6.235, +7.53], limits of agreement -13.17 to +26.94; difference-on-mean slope +0.130 (p 6.4e-10); medians 15.1 vs 23.47; true SD 14.09 vs 15.05
+  categories at P >= 0.80: kappa 0.38, agreement 79%; at least as fair as #518: Stockfish 100, Caissa 6, both 4 (kappa 0.06)
+  categories at P >= 0.95: kappa 0.46, agreement 74%; at least as fair as #518: Stockfish 4, Caissa 0, both 0 (kappa 0.00)
+  top 10 most unbalanced in both: 8 (18 80 193 752 784 794 868 879)
+  top 50 most unbalanced in both: 32 (18 24 80 111 176 188 193 316 317 333 348 368 399 477 557 560 605 620 637 694 696 752 760 784 794 848 868 879 880 882 886 935)
+
+3. Decisiveness
+  Caissa: decisive median 17.0% (range 4.6-41.4%); fitted at |$\Delta_{\text{Elo}}$| = 0/10/25/50/100: 12.6/14.2/17.0/22.3/35.9%; Spearman with |$\Delta_{\text{Elo}}$| 0.70; #518 8.7% [5.7, 12.2], rank 946/960 for decisiveness
+  Stockfish: decisive median 8.8% (range 1.2-33.6%); fitted at |$\Delta_{\text{Elo}}$| = 0/10/25/50/100: 5.3/7.2/10.7/18.0/30.2%; Spearman with |$\Delta_{\text{Elo}}$| 0.81; #518 5.1% [2.9, 7.9], rank 875/960 for decisiveness
+  agreement between engines on decisive rate: Spearman 0.71
+  fair and decisive (P >= 0.80 for both): Stockfish 29 (64 163 178 192 247 257 285 292 302 318 319 320 327 472 510 541 551 590 623 674 712 751 796 811 812 847 867 909 928)
+  fair and decisive (P >= 0.80 for both): Caissa 0
+    in both engines: 0
+  fair and decisive (P >= 0.95 for both): Stockfish 0
+  fair and decisive (P >= 0.95 for both): Caissa 0
+    in both engines: 0
+
+Sensitivity: Bayesian bootstrap over lines vs design-effect Dirichlet (ratio of $E_{\text{score}}$ posterior SDs)
+  Caissa: median ratio 0.95 (IQR 0.86-1.04)
+  Stockfish: median ratio 0.91 (IQR 0.83-1.02)

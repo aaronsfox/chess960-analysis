@@ -33,6 +33,7 @@ code/
   evaluate_sp.py    evaluate starting positions and collect results
   opening_book_generator.py  build the self-play opening book
   selfplay.py       engine self-play games with fastchess, and their tables
+  analyse_selfplay.py  self-play analysis: balance, agreement, decisiveness
   analyse_sp.py     starting-position analysis: balance, stability, agreement
   plot_style.py     shared figure style: fonts, engine colours/markers/lines, metric labels
   plot_boards.py    board diagrams for figures
@@ -280,6 +281,39 @@ Sans where Arial isn't installed), bold axis labels (7 pt) and tick labels (8 pt
 no gridlines, the metric labels, and each engine's colour, marker and line
 style (Stockfish #104485, circle, solid; Caissa #f17f03, square, dashed;
 Lc0 #418c47, triangle, dotted; PlentyChess #b63667, diamond, dash-dot).
+
+## Self-play analysis (analyse_selfplay.py)
+
+```bash
+python code/analyse_selfplay.py
+```
+
+Reads the `selfplay.py collect` tables and the starting-position evaluations
+and follows the self-play analysis plan for Stockfish and Caissa:
+
+- **Quality checks and design effect:** games per position, line matching,
+  losses on time, colour balance of the two engine copies, book drift, and
+  the intraclass correlation (ICC) of games within book lines, giving the
+  design effect DEFF = 1 + 9·ICC per engine.
+- **Dirichlet posteriors:** each position's win/draw/loss counts get a
+  Dirichlet(½ + (W, D, L)/DEFF) posterior. Monte Carlo draws give
+  $E_{\text{score}}$ and $\Delta_{\text{Elo}}$ with 95% intervals,
+  P(favours White), P(practically balanced), P(favours Black), decisive rate,
+  White's share of decisive games, and comparisons with standard chess (#518).
+  A Bayesian bootstrap over book lines is the sensitivity check.
+- **1. Balance:** self-play outcomes regressed on each engine's top-budget
+  evaluation (Pearson r also corrected for self-play noise), and the posterior
+  summaries. Counts are given at probability thresholds 0.80 and 0.95.
+- **2. Agreement** between Stockfish and Caissa games: Spearman's ρ (observed
+  and corrected for noise), Bland–Altman, level and spread, Cohen's κ on the
+  categories, overlap of the most unbalanced positions.
+- **3. Decisiveness:** decisive rate against |$\Delta_{\text{Elo}}$| (logistic
+  regression weighted by effective sample size), White's share of decisive
+  games, fair-and-decisive positions relative to #518, and how games end.
+
+Tables go to `results/selfplay/analysis/` (`selfplay_*.csv` and
+`selfplay_summary.txt`) and figures to `results/figures/` (`selfplay_*`),
+in the `plot_style.py` style.
 
 ## Figures
 

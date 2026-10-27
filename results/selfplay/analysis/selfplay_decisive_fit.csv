@@ -1,0 +1,3 @@
+engine,model,b0,b0_se,b1,b1_se,b2,b2_se,decisive_at_0,decisive_at_10,decisive_at_25,decisive_at_50,decisive_at_100,decisive_median,decisive_min,decisive_max,pos518_decisive,pos518_decisive_lo,pos518_decisive_hi,pos518_decisive_rank,spearman_decisive_abs_delta
+caissa,logit(decisive) ~ |Delta_Elo| + |Delta_Elo|^2,-1.93676,0.0137196,0.0140106,0.000745885,-4.28139e-06,8.60159e-06,0.126004,0.142207,0.169501,0.223232,0.359275,0.17,0.046,0.414,0.0871446,0.0572095,0.12248,946,0.702403
+stockfish,logit(decisive) ~ |Delta_Elo| + |Delta_Elo|^2,-2.89176,0.015405,0.0344409,0.000950612,-0.000139174,1.09276e-05,0.0525624,0.0716731,0.107386,0.179808,0.301659,0.088,0.012,0.336,0.0509964,0.0292621,0.0786622,875,0.812284

@@ -1,0 +1,5 @@
+threshold,kappa_category,percent_agreement,n_fair_518_stockfish,n_fair_518_caissa,n_fair_518_both,kappa_fair_518,top10_overlap,top10_common,top50_overlap,top50_common
+0.8,0.376218,78.75,100,6,4,0.0644391,,,,
+0.95,0.459294,73.9583,4,0,0,0,,,,
+,,,,,,,8,18 80 193 752 784 794 868 879,,
+,,,,,,,,,32,18 24 80 111 176 188 193 316 317 333 348 368 399 477 557 560 605 620 637 694 696 752 760 784 794 848 868 879 880 882 886 935

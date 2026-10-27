@@ -1,0 +1,3 @@
+engine,positions,games,games_per_position_min,games_per_position_max,unmatched_lines,losses_on_time,abnormal_terminations,white_win_rate,draw_rate,black_win_rate,mean_plies,copy_a_white_score,copy_b_white_score,icc,deff,book_shift_slope,book_shift_slope_se,book_shift_r,icc_book_adjusted,deff_book_adjusted,max_abs_position_mean_shift,nodes_per_second_median
+caissa,960,480000,500,500,0,0,0,0.124948,0.825577,0.049475,110.837,0.537583,0.53789,0.0833247,1.74992,1.14407,0.0154008,0.106612,0.0726064,1.65346,0.00735,856804
+stockfish,960,480000,500,500,0,0,0,0.0757625,0.904354,0.0198833,111.112,0.528106,0.527773,0.0712859,1.64157,1.05996,0.0113299,0.13382,0.0540572,1.48652,0.00735,537000
