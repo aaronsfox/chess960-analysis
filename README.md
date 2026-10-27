@@ -309,7 +309,11 @@ and follows the self-play analysis plan for Stockfish and Caissa:
   categories, overlap of the most unbalanced positions.
 - **3. Decisiveness:** decisive rate against |$\Delta_{\text{Elo}}$| (logistic
   regression weighted by effective sample size), White's share of decisive
-  games, fair-and-decisive positions relative to #518, and how games end.
+  games, and how games end.
+- **Ranking, not selection:** `selfplay_position_table.csv` lists all 960
+  positions with both engines' estimates, intervals and probabilities, ranked
+  by advantage, fairness (|$\Delta_{\text{Elo}}$|), decisiveness and by
+  P(at least as fair as and more decisive than #518).
 
 Tables go to `results/selfplay/analysis/` (`selfplay_*.csv` and
 `selfplay_summary.txt`) and figures to `results/figures/` (`selfplay_*`),

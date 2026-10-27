@@ -25,11 +25,14 @@ posteriors. A Bayesian bootstrap over book lines is the sensitivity check.
    classification agreement (Cohen's kappa) and overlap of extremes.
 3. Decisiveness: decisive rate (1 - draw rate) per position, its relation to
    |Delta_Elo| (logistic regression weighted by the effective sample size),
-   White's share of decisive games, fair-and-decisive positions relative to
-   #518, how games end by advantage, and agreement between engines.
+   White's share of decisive games, how games end by advantage, and
+   agreement between engines.
 
-Probabilities are reported in full; counts are given at two thresholds,
-0.80 and 0.95, so no single cut-off drives the conclusions.
+Positions are ranked rather than selected: selfplay_position_table.csv lists
+all 960 with both engines' estimates, intervals and probabilities, ranked by
+advantage, fairness, decisiveness and by P(at least as fair as and more
+decisive than #518). Counts at probability thresholds 0.80 and 0.95 are
+reported in the summary for transparency only.
 
 Writes tables to results/selfplay/analysis/ (selfplay_*.csv and
 selfplay_summary.txt) and figures to results/figures/ (selfplay_*.pdf/.png,
@@ -217,6 +220,8 @@ def posteriors(counts: pd.DataFrame, deff: dict[str, float]) -> pd.DataFrame:
                 "p_at_least_as_fair_as_518": float((np.abs(de) <= np.abs(ref_elo)).mean()),
                 "p_more_white_than_518": float((de > ref_elo).mean()),
                 "p_more_decisive_than_518": float((dec > ref_dec).mean()),
+                "p_fairer_and_more_decisive_than_518": float(((np.abs(de) <= np.abs(ref_elo))
+                                                              & (dec > ref_dec)).mean()),
             })
     out = pd.DataFrame(rows)
     out["rank_delta_elo"] = out.groupby("engine").delta_elo_median.rank(ascending=False,
@@ -455,27 +460,38 @@ def decisiveness(post: pd.DataFrame, deff: dict[str, float]) -> tuple[pd.DataFra
     return pd.DataFrame(fits), pd.concat(residual_rows), predictors
 
 
-def fair_and_decisive(post: pd.DataFrame, resid: pd.DataFrame) -> pd.DataFrame:
-    m = post.merge(resid, on=["engine", "position_id"])
-    rows = []
-    for t in THRESHOLDS:
-        sel = m[(m.p_at_least_as_fair_as_518 >= t) & (m.p_more_decisive_than_518 >= t)]
-        for r in sel.itertuples():
-            rows.append({"threshold": t, "engine": r.engine, "position_id": r.position_id,
-                         "delta_elo": r.delta_elo_median, "delta_elo_lo": r.delta_elo_lo,
-                         "delta_elo_hi": r.delta_elo_hi, "decisive": r.decisive_mean,
-                         "decisive_lo": r.decisive_lo, "decisive_hi": r.decisive_hi,
-                         "p_at_least_as_fair_as_518": r.p_at_least_as_fair_as_518,
-                         "p_more_decisive_than_518": r.p_more_decisive_than_518,
-                         "decisive_residual_z": r.decisive_residual_z})
-    out = pd.DataFrame(rows)
-    if not out.empty:
-        both = out.groupby(["threshold", "position_id"]).engine.nunique()
-        both = both[both == 2].reset_index()[["threshold", "position_id"]]
-        both["both_engines"] = True
-        out = out.merge(both, on=["threshold", "position_id"], how="left")
-        out["both_engines"] = out.both_engines.fillna(False).astype(bool)
-    return out
+def position_table(post: pd.DataFrame, resid: pd.DataFrame) -> pd.DataFrame:
+    """Every position with both engines' estimates side by side and its
+    rankings: advantage for White (1 = largest), fairness (1 = smallest
+    |Delta_Elo|), decisiveness (1 = most decisive), and fair-and-decisive
+    (1 = highest probability of being both at least as fair as and more
+    decisive than #518). No thresholds: positions are ranked, not selected.
+    The cross-engine rank uses the mean of the two engines' joint
+    probabilities."""
+    from utils import get_position
+    m = post.merge(resid[["engine", "position_id", "decisive_residual_z"]],
+                   on=["engine", "position_id"])
+    keep = ["escore_mean", "escore_lo", "escore_hi", "delta_elo_median", "delta_elo_lo",
+            "delta_elo_hi", "p_favours_white", "p_balanced", "p_favours_black",
+            "decisive_mean", "decisive_lo", "decisive_hi", "white_share_decisive_mean",
+            "p_at_least_as_fair_as_518", "p_more_white_than_518", "p_more_decisive_than_518",
+            "p_fairer_and_more_decisive_than_518", "decisive_residual_z"]
+    parts = []
+    for engine, g in m.groupby("engine"):
+        g = g.set_index("position_id")[keep].copy()
+        g["rank_advantage"] = g.delta_elo_median.rank(ascending=False, method="min").astype(int)
+        g["rank_fairness"] = g.delta_elo_median.abs().rank(method="min").astype(int)
+        g["rank_decisive"] = g.decisive_mean.rank(ascending=False, method="min").astype(int)
+        g["rank_fair_decisive"] = g.p_fairer_and_more_decisive_than_518.rank(
+            ascending=False, method="min").astype(int)
+        g.columns = [f"{engine}_{c}" for c in g.columns]
+        parts.append(g)
+    out = pd.concat(parts, axis=1).reset_index()
+    out.insert(1, "arrangement", out.position_id.map(lambda i: get_position(i).arrangement))
+    jp = out[[f"{e}_p_fairer_and_more_decisive_than_518" for e in SELFPLAY_ENGINES]].mean(axis=1)
+    out["mean_p_fairer_and_more_decisive_than_518"] = jp
+    out["rank_fair_decisive_both"] = jp.rank(ascending=False, method="min").astype(int)
+    return out.sort_values("rank_fair_decisive_both").reset_index(drop=True)
 
 
 def endings_by_advantage(games: pd.DataFrame, post: pd.DataFrame) -> pd.DataFrame:
@@ -793,14 +809,15 @@ def summary_text(qc, reg, bal, agree, cls, dfit, fair, dagree, bb) -> str:
                  f"[{100 * r.pos518_decisive_lo:.1f}, {100 * r.pos518_decisive_hi:.1f}], rank "
                  f"{r.pos518_decisive_rank}/960 for decisiveness")
     L.append(f"  agreement between engines on decisive rate: Spearman {dagree['spearman_decisive']:.2f}")
-    for t in THRESHOLDS:
-        f = fair[fair.threshold == t] if not fair.empty else fair
-        for sp in SELFPLAY_ENGINES:
-            ids = sorted(f[f.engine == sp].position_id.tolist()) if not f.empty else []
-            L.append(f"  fair and decisive (P >= {t:.2f} for both): {lab[sp]} {len(ids)}"
-                     + (f" ({' '.join(map(str, ids[:30]))}{' ...' if len(ids) > 30 else ''})" if ids else ""))
-        both = sorted(f[f.both_engines].position_id.unique().tolist()) if not f.empty else []
-        L.append(f"    in both engines: {len(both)}" + (f" ({' '.join(map(str, both))})" if both else ""))
+    L.append("  fair and decisive relative to #518, ranked by P(at least as fair AND more decisive "
+             "than #518), mean of both engines (top 15):")
+    for r in fair.head(15).itertuples():
+        L.append(f"    {r.rank_fair_decisive_both:>3}. #{r.position_id} {r.arrangement}: mean P "
+                 f"{r.mean_p_fairer_and_more_decisive_than_518:.2f} | Stockfish {D} "
+                 f"{r.stockfish_delta_elo_median:+.1f}, decisive {100 * r.stockfish_decisive_mean:.1f}% "
+                 f"(P {r.stockfish_p_fairer_and_more_decisive_than_518:.2f}) | Caissa {D} "
+                 f"{r.caissa_delta_elo_median:+.1f}, decisive {100 * r.caissa_decisive_mean:.1f}% "
+                 f"(P {r.caissa_p_fairer_and_more_decisive_than_518:.2f})")
     L += ["", "Sensitivity: Bayesian bootstrap over lines vs design-effect Dirichlet (ratio of "
           f"{E} posterior SDs)"]
     for engine, g in bb.groupby("engine"):
@@ -835,7 +852,7 @@ def main(argv: list[str] | None = None) -> int:
     bal = balance_summary(post)
     agree, extra = agreement(post)
     dfit, resid, predictors = decisiveness(post, deff)
-    fair = fair_and_decisive(post, resid)
+    fair = position_table(post, resid)
     endings = endings_by_advantage(games, post)
     dagree = decisive_agreement(post)
 
@@ -849,7 +866,7 @@ def main(argv: list[str] | None = None) -> int:
         "selfplay_agreement.csv": agree,
         "selfplay_agreement_classification.csv": extra["classification"],
         "selfplay_decisive_fit.csv": dfit,
-        "selfplay_fair_decisive.csv": fair,
+        "selfplay_position_table.csv": fair,
         "selfplay_endings_by_advantage.csv": endings,
         "selfplay_sensitivity_bootstrap.csv": bb,
     }

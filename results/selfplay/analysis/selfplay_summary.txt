@@ -45,12 +45,22 @@ Self-play (selfplay): key numbers
   Caissa: decisive median 17.0% (range 4.6-41.4%); fitted at |$\Delta_{\text{Elo}}$| = 0/10/25/50/100: 12.6/14.2/17.0/22.3/35.9%; Spearman with |$\Delta_{\text{Elo}}$| 0.70; #518 8.7% [5.7, 12.2], rank 946/960 for decisiveness
   Stockfish: decisive median 8.8% (range 1.2-33.6%); fitted at |$\Delta_{\text{Elo}}$| = 0/10/25/50/100: 5.3/7.2/10.7/18.0/30.2%; Spearman with |$\Delta_{\text{Elo}}$| 0.81; #518 5.1% [2.9, 7.9], rank 875/960 for decisiveness
   agreement between engines on decisive rate: Spearman 0.71
-  fair and decisive (P >= 0.80 for both): Stockfish 29 (64 163 178 192 247 257 285 292 302 318 319 320 327 472 510 541 551 590 623 674 712 751 796 811 812 847 867 909 928)
-  fair and decisive (P >= 0.80 for both): Caissa 0
-    in both engines: 0
-  fair and decisive (P >= 0.95 for both): Stockfish 0
-  fair and decisive (P >= 0.95 for both): Caissa 0
-    in both engines: 0
+  fair and decisive relative to #518, ranked by P(at least as fair AND more decisive than #518), mean of both engines (top 15):
+      1. #674 BQRKNBNR: mean P 0.77 | Stockfish $\Delta_{\text{Elo}}$ +1.4, decisive 7.9% (P 0.80) | Caissa $\Delta_{\text{Elo}}$ +2.1, decisive 14.5% (P 0.73)
+      2. #178 BNRNKBRQ: mean P 0.76 | Stockfish $\Delta_{\text{Elo}}$ +1.4, decisive 9.5% (P 0.84) | Caissa $\Delta_{\text{Elo}}$ +0.6, decisive 22.9% (P 0.67)
+      3. #247 NRBKQNRB: mean P 0.75 | Stockfish $\Delta_{\text{Elo}}$ +0.6, decisive 8.1% (P 0.82) | Caissa $\Delta_{\text{Elo}}$ +4.6, decisive 14.5% (P 0.68)
+      4. #541 RNKBQNBR: mean P 0.75 | Stockfish $\Delta_{\text{Elo}}$ +1.4, decisive 10.3% (P 0.84) | Caissa $\Delta_{\text{Elo}}$ +5.5, decisive 17.1% (P 0.66)
+      5. #222 NQRKNBBR: mean P 0.75 | Stockfish $\Delta_{\text{Elo}}$ +4.0, decisive 11.1% (P 0.78) | Caissa $\Delta_{\text{Elo}}$ -1.3, decisive 19.0% (P 0.71)
+      6. #610 BRNQKBRN: mean P 0.75 | Stockfish $\Delta_{\text{Elo}}$ +4.8, decisive 9.3% (P 0.76) | Caissa $\Delta_{\text{Elo}}$ -1.4, decisive 16.3% (P 0.73)
+      7. #192 BBQNRKNR: mean P 0.74 | Stockfish $\Delta_{\text{Elo}}$ +4.1, decisive 8.7% (P 0.77) | Caissa $\Delta_{\text{Elo}}$ +1.4, decisive 17.4% (P 0.72)
+      8. #320 BBNRQKRN: mean P 0.73 | Stockfish $\Delta_{\text{Elo}}$ -2.2, decisive 7.7% (P 0.78) | Caissa $\Delta_{\text{Elo}}$ -3.5, decisive 12.9% (P 0.69)
+      9. #551 RNBKNQRB: mean P 0.72 | Stockfish $\Delta_{\text{Elo}}$ +2.7, decisive 7.9% (P 0.78) | Caissa $\Delta_{\text{Elo}}$ -6.2, decisive 14.9% (P 0.65)
+     10. #285 NRKBNRBQ: mean P 0.71 | Stockfish $\Delta_{\text{Elo}}$ +3.5, decisive 10.1% (P 0.81) | Caissa $\Delta_{\text{Elo}}$ +7.0, decisive 19.0% (P 0.61)
+     11. #163 BNRNKQRB: mean P 0.70 | Stockfish $\Delta_{\text{Elo}}$ -1.3, decisive 6.7% (P 0.71) | Caissa $\Delta_{\text{Elo}}$ +3.5, decisive 15.7% (P 0.70)
+     12. #644 RBBNKRQN: mean P 0.70 | Stockfish $\Delta_{\text{Elo}}$ +5.5, decisive 9.1% (P 0.74) | Caissa $\Delta_{\text{Elo}}$ +4.2, decisive 21.4% (P 0.66)
+     13. #928 BBRKRNQN: mean P 0.70 | Stockfish $\Delta_{\text{Elo}}$ -2.1, decisive 7.3% (P 0.75) | Caissa $\Delta_{\text{Elo}}$ -5.3, decisive 18.7% (P 0.65)
+     14. #510 RQNKNBBR: mean P 0.69 | Stockfish $\Delta_{\text{Elo}}$ +2.1, decisive 9.3% (P 0.83) | Caissa $\Delta_{\text{Elo}}$ +8.9, decisive 19.2% (P 0.55)
+     15. #623 RNQKRNBB: mean P 0.67 | Stockfish $\Delta_{\text{Elo}}$ +4.1, decisive 7.9% (P 0.75) | Caissa $\Delta_{\text{Elo}}$ +7.7, decisive 17.3% (P 0.60)
 
 Sensitivity: Bayesian bootstrap over lines vs design-effect Dirichlet (ratio of $E_{\text{score}}$ posterior SDs)
   Caissa: median ratio 0.95 (IQR 0.86-1.04)
