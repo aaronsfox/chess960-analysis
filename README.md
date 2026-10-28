@@ -270,6 +270,7 @@ file as PDF and PNG, to `results/figures/`:
 | `evaluate_sp_stability_budgets_<metric>` | median advantage at each budget (IQR shaded) |
 | `evaluate_sp_stability_stabilised_delta_elo` | positions stable from each budget on |
 | `evaluate_sp_agreement_spearman` | Spearman matrix with 95% intervals |
+| `evaluate_sp_agreement_scatter_matrix` | lower-triangle grid of all six centipawn scatter plots, each with ρ [95% CI]; replaces the Spearman table |
 | `evaluate_sp_agreement_scatter_<a>_<b>` | top-budget centipawns of engine a against b (all six pairs), #518 ringed, line of equality |
 
 `<metric>` is `escore` or `delta_elo`. Stabilisation is defined on

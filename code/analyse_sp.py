@@ -497,6 +497,55 @@ def figure_scatter(top: pd.DataFrame, agree: pd.DataFrame, a: str, b: str,
     return finish(fig, ax, f"evaluate_sp_agreement_scatter_{a}_{b}", out_dir)
 
 
+def figure_scatter_matrix(top: pd.DataFrame, agree: pd.DataFrame, out_dir: Path) -> list[Path]:
+    """Lower-triangle grid of centipawn scatter plots for every engine pair,
+    laid out like the Spearman table: columns Stockfish, Caissa, Lc0; rows
+    Caissa, Lc0, PlentyChess. Each panel shows rho [95% CI]; #518 ringed;
+    dotted line of equality; common axes across panels."""
+    plt = apply_style()
+    from matplotlib.ticker import MultipleLocator
+    cp = top.pivot(index="position_id", columns="engine", values="cp_white")
+    cols_e, rows_e = ALL_ENGINES[:-1], ALL_ENGINES[1:]
+    n = len(cols_e)
+    lo = float(cp[ALL_ENGINES].min().min()) - 5
+    hi = float(cp[ALL_ENGINES].max().max()) + 5
+    fig, axes = plt.subplots(n, n, figsize=(7.0, 7.0), sharex=True, sharey=True,
+                             gridspec_kw={"wspace": 0.08, "hspace": 0.08})
+    std = cp.loc[STANDARD_POSITION_ID]
+    for i, yb in enumerate(rows_e):
+        for j, xa in enumerate(cols_e):
+            ax = axes[i, j]
+            if j > i:
+                ax.set_visible(False)
+                continue
+            ax.plot([lo, hi], [lo, hi], color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=1)
+            ax.scatter(cp[xa], cp[yb], s=6, color="#222222", alpha=0.35, lw=0, zorder=2)
+            ax.scatter(std[xa], std[yb], s=36, facecolor="none", edgecolor="#222222", lw=1.1,
+                       zorder=3)
+            r = agree[((agree.engine_a == xa) & (agree.engine_b == yb))
+                      | ((agree.engine_a == yb) & (agree.engine_b == xa))].iloc[0]
+            ax.text(0.05, 0.95, f"ρ = {r.spearman:.2f}\n[{r.ci_low:.2f}, {r.ci_high:.2f}]",
+                    transform=ax.transAxes, ha="left", va="top", fontsize=7.5,
+                    fontweight="bold", linespacing=1.3)
+            ax.set_xlim(lo, hi)
+            ax.set_ylim(lo, hi)
+            ax.set_aspect("equal")
+            ax.xaxis.set_major_locator(MultipleLocator(20))
+            ax.yaxis.set_major_locator(MultipleLocator(20))
+            if i == n - 1:
+                ax.set_xlabel(f"{ENGINES[xa].label} (cp)")
+            if j == 0:
+                ax.set_ylabel(f"{ENGINES[yb].label} (cp)")
+            bold_tick_labels(ax)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    paths = [out_dir / "evaluate_sp_agreement_scatter_matrix.pdf",
+             out_dir / "evaluate_sp_agreement_scatter_matrix.png"]
+    for path in paths:
+        fig.savefig(path, metadata={"CreationDate": None} if path.suffix == ".pdf" else None)
+    plt.close(fig)
+    return paths
+
+
 def all_figures(ranking, steps, budgets, counts, agree, out_dir: Path, top=None) -> list[Path]:
     paths: list[Path] = []
     for metric in METRICS:
@@ -509,6 +558,7 @@ def all_figures(ranking, steps, budgets, counts, agree, out_dir: Path, top=None)
     if top is not None:
         for a, b in itertools.combinations(ALL_ENGINES, 2):
             paths += figure_scatter(top, agree, a, b, out_dir)
+        paths += figure_scatter_matrix(top, agree, out_dir)
     return paths
 
 
