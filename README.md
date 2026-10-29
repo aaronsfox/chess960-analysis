@@ -339,6 +339,16 @@ gives tan squares instead. `--no-arrows` and `--no-letters` drop the move arrows
 and the (a), (b), ... panel letters. Use `--engine caissa` (or lc0, plentychess) for another
 engine's move and evaluation, or `--engine none` for plain boards.
 
+Boards after opening-book lines (`--lines position:line_index,...`), with the
+moves in the caption, e.g. the opening-book example figure:
+
+```bash
+python code/plot_boards.py --lines 518:1,518:14,518:43,518:34,868:0,868:3,868:4,868:32 \
+    --cols 4 --no-letters --out results/figures/selfplay_book_examples \
+    --labels "Sicilian Defence: Closed (B23)" "Queen's Gambit Declined (D30)" \
+             "Caro-Kann Defence (B10)" "English: Anglo-Indian, Slav (A15)" "" "" "" ""
+```
+
 ## Positions
 
 Positions use Scharnagl numbering 0–959, with #518 the standard starting

@@ -53,6 +53,34 @@ HATCH_DEFS = (
 )
 
 
+DEFAULT_BOOK = REPO_ROOT / "results" / "opening_book" / "book" / "opening_book_lines.parquet"
+
+
+def book_line_items(spec: str, book_path: Path) -> list[dict]:
+    """Boards after opening-book lines, from 'position:line_index,...'."""
+    book = pd.read_parquet(book_path, columns=["position_id", "line_index", "moves_uci"])
+    items = []
+    for token in spec.split(","):
+        pos_s, line_s = token.strip().split(":")
+        pos_id, line = int(pos_s), int(line_s)
+        row = book[(book.position_id == pos_id) & (book.line_index == line)]
+        if row.empty:
+            raise SystemExit(f"no book line {line} for position {pos_id}")
+        board = get_position(pos_id).board()
+        start = board.copy()
+        moves = [chess.Move.from_uci(u) for u in row.iloc[0].moves_uci.split()]
+        for mv in moves:
+            board.push(mv)
+        items.append({"pos_id": pos_id, "board": board, "line": start.variation_san(moves)})
+    return items
+
+
+def line_caption(item: dict, label: str | None) -> str:
+    """'#518  RNBQKBNR' (or the label), then the moves, e.g. '1. e4 c5 2. Nc3 a6 3. g3 d6'."""
+    head = f"#{item['pos_id']}  {label or get_position(item['pos_id']).arrangement}"
+    return f"{head}\n{item['line']}"
+
+
 def board_png(board: chess.Board, arrow: chess.Move | None, size: int, dpi_scale: float,
               style: str = "diagram") -> bytes:
     import cairosvg
@@ -116,8 +144,12 @@ def caption_for(pos_id: int, label: str | None, ev: pd.DataFrame | None, engine:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--positions", required=True, help="e.g. 518,868,94 or @file")
-    p.add_argument("--labels", nargs="*", help="one short label per position (optional)")
+    src = p.add_mutually_exclusive_group(required=True)
+    src.add_argument("--positions", help="e.g. 518,868,94 or @file")
+    src.add_argument("--lines", help="opening-book lines as position:line_index, e.g. "
+                     "518:14,518:1,868:0; each board shows the position after the line")
+    p.add_argument("--labels", nargs="*", help="one short label per board (optional)")
+    p.add_argument("--book", default=str(DEFAULT_BOOK), help="opening_book_lines.parquet")
     p.add_argument("--engine", default="stockfish", help="engine for arrow and caption ('none' to omit)")
     p.add_argument("--table", default=str(DEFAULT_TABLE), help="evaluate_sp_final.parquet")
     p.add_argument("--cols", type=int, default=4)
@@ -134,11 +166,17 @@ def main(argv: list[str] | None = None) -> int:
     from matplotlib import image as mpimg
     from matplotlib.patches import Rectangle
 
-    ids = ordered_positions(args.positions)
-    labels = args.labels or [None] * len(ids)
-    if len(labels) != len(ids):
-        p.error("--labels needs one label per position")
-    ev = None if args.engine == "none" else evaluation_lookup(Path(args.table), args.engine)
+    if args.lines:
+        items = book_line_items(args.lines, Path(args.book))
+        ev = None
+    else:
+        ids = ordered_positions(args.positions)
+        ev = None if args.engine == "none" else evaluation_lookup(Path(args.table), args.engine)
+        items = [{"pos_id": i, "board": get_position(i).board(), "line": None} for i in ids]
+    labels = args.labels or [None] * len(items)
+    if len(labels) != len(items):
+        p.error("--labels needs one label per board")
+    ids = [it["pos_id"] for it in items]
 
     cols = min(args.cols, len(ids))
     rows = -(-len(ids) // cols)
@@ -149,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         if i >= len(ids):
             continue
         pos_id = ids[i]
-        board = get_position(pos_id).board()
+        board = items[i]["board"]
         arrow = None
         if ev is not None and not args.no_arrows and pos_id in ev.index:
             arrow = chess.Move.from_uci(ev.loc[pos_id, "bestmove"])
@@ -168,13 +206,13 @@ def main(argv: list[str] | None = None) -> int:
             ax.set_aspect("equal")
             if not args.no_letters:
                 ax.set_title(f"({letter})", loc="left", fontsize=9, fontweight="bold", pad=2)
-            ax.text(0.5, -0.04, caption_for(pos_id, labels[i], ev, args.engine),
+            ax.text(0.5, -0.04, (line_caption(items[i], labels[i]) if items[i]['line'] else caption_for(pos_id, labels[i], ev, args.engine)),
                     transform=ax.transAxes, ha="center", va="top", fontsize=7.2, linespacing=1.35)
         else:
             ax.imshow(img)
             if not args.no_letters:
                 ax.set_title(f"({letter})", loc="left", fontsize=9, fontweight="bold", pad=2)
-            ax.text(0.5, -0.03, caption_for(pos_id, labels[i], ev, args.engine),
+            ax.text(0.5, -0.03, (line_caption(items[i], labels[i]) if items[i]['line'] else caption_for(pos_id, labels[i], ev, args.engine)),
                     transform=ax.transAxes, ha="center", va="top", fontsize=7.2, linespacing=1.35)
     fig.subplots_adjust(left=0.01, right=0.99, top=0.97, bottom=0.08, wspace=0.06, hspace=0.42)
 
