@@ -845,7 +845,7 @@ def fig_vs_evaluation_panel(post, top, reg, out_dir: Path) -> list[Path]:
     """Self-play Delta_Elo against the same engine's top-budget evaluation,
     Stockfish and Caissa side by side on common axes, in the style of the
     starting-position scatter matrix: one point per position, dotted line of
-    equality, solid least-squares line, #518 ringed, statistics in the corner."""
+    equality, solid least-squares line, slope (SE) and R² in the corner."""
     plt = apply_style()
     from matplotlib.ticker import MultipleLocator
     xs, ys = {}, {}
@@ -865,11 +865,7 @@ def fig_vs_evaluation_panel(post, top, reg, out_dir: Path) -> list[Path]:
         ax.scatter(x, y, s=7, color="#222222", alpha=0.35, lw=0, zorder=2)
         grid = np.array([lo, hi])
         ax.plot(grid, r.intercept + r.slope * grid, color="#111111", lw=1.1, zorder=3)
-        ax.scatter(x[STANDARD_POSITION_ID], y[STANDARD_POSITION_ID], s=40, facecolor="none",
-                   edgecolor="#111111", lw=1.2, zorder=4)
-        ax.text(0.05, 0.95,
-                f"slope = {r.slope:.2f} ({r.slope_se:.2f})\nintercept = {r.intercept:+.1f}\n"
-                f"R$^2$ = {r.r2:.2f}\nr = {r.pearson:.2f}",
+        ax.text(0.05, 0.95, f"Slope (SE) = {r.slope:.2f} ({r.slope_se:.2f})\nR$^2$ = {r.r2:.2f}",
                 transform=ax.transAxes, ha="left", va="top", fontsize=7.5, fontweight="bold",
                 linespacing=1.35)
         ax.set_title(ENGINES[sp].label, fontsize=9, fontweight="bold")
@@ -878,7 +874,7 @@ def fig_vs_evaluation_panel(post, top, reg, out_dir: Path) -> list[Path]:
         ax.set_aspect("equal")
         ax.xaxis.set_major_locator(MultipleLocator(25))
         ax.yaxis.set_major_locator(MultipleLocator(25))
-        ax.set_xlabel(f"Evaluation {METRICS['delta_elo'].bold_symbol}")
+        ax.set_xlabel(f"Starting Position Evaluation {METRICS['delta_elo'].bold_symbol}")
         bold_tick_labels(ax)
     axes[0].set_ylabel(f"Self-play {METRICS['delta_elo'].bold_symbol}")
     return save_fig(fig, "selfplay_balance_vs_evaluation", out_dir)
@@ -903,13 +899,9 @@ def fig_ranked_panel(post, out_dir: Path) -> list[Path]:
                   lw=1.2, zorder=3)
         ax.plot(k + 1, g.loc[k, "delta_elo_median"], marker=s.marker, ms=6, color="#111111",
                 mec="white", mew=0.9, ls="none", zorder=4)
-        above = int((g.delta_elo_lo > b1).sum())
-        ax.text(0.97, 0.95, f"Interval above +5: {above}\nOverlapping ±5: {len(g) - above}",
-                transform=ax.transAxes, ha="right", va="top", fontsize=7.5, fontweight="bold",
-                linespacing=1.35)
         ax.set_title(s.label, fontsize=9, fontweight="bold")
         ax.set_xlim(0, len(g) + 1)
-        ax.set_xlabel("Rank (1 = largest advantage for White)")
+        ax.set_xlabel("Position Rankings")
         bold_tick_labels(ax)
     axes[0].set_ylabel(METRICS["delta_elo"].axis_label)
     return save_fig(fig, "selfplay_balance_ranked", out_dir)
