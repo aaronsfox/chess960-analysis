@@ -316,6 +316,14 @@ and follows the self-play analysis plan for Stockfish and Caissa:
   by advantage, fairness (|$\Delta_{\text{Elo}}$|), decisiveness and by
   P(at least as fair as and more decisive than #518).
 
+Ternary (win/draw/loss) figures: `selfplay_ternary_overview` places every
+position's posterior mean in the full triangle (corners Black wins, White
+wins, draw); the horizontal position is White's expected score and the
+height the draw rate, so the practically balanced band is a vertical strip.
+`selfplay_ternary_zoom_<engine>` shows the 50% and 95% highest-density
+regions of the posterior for contrasting positions (#868 unbalanced, #518
+standard, #674 fair and decisive, #226 fair and drawish).
+
 Tables go to `results/selfplay/analysis/` (`selfplay_*.csv` and
 `selfplay_summary.txt`) and figures to `results/figures/` (`selfplay_*`),
 in the `plot_style.py` style.

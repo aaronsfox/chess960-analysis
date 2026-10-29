@@ -716,7 +716,110 @@ def fig_white_share(post, out_dir: Path) -> list[Path]:
     return finish(fig, ax, "selfplay_decisive_white_share", out_dir)
 
 
-def all_figures(post, top, agree, predictors, fair, out_dir: Path) -> list[Path]:
+# Ternary (win/draw/loss) plots. Corners: Black wins (0, 0), White wins (1, 0),
+# draw (1/2, sqrt(3)/2). A point (p_W, p_D, p_L) maps to x = p_W + p_D/2, which
+# is exactly White's expected score, and y = (sqrt(3)/2) p_D, so lines of equal
+# advantage are vertical and height is the draw rate.
+H = np.sqrt(3) / 2
+TERNARY_POSITIONS = [868, STANDARD_POSITION_ID, 674, 226]   # unbalanced, standard,
+#   fair and decisive, fair and drawish
+
+
+def to_xy(p: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    return p[:, 0] + p[:, 1] / 2, H * p[:, 1]
+
+
+def ternary_grid(ax) -> None:
+    for v in np.arange(0.2, 1.0, 0.2):
+        ax.plot([v / 2, 1 - v / 2], [H * v, H * v], color="#e3e3e3", lw=0.6, zorder=0)    # p_D = v
+        ax.plot([v, 0.5 + v / 2], [0, H * (1 - v)], color="#e3e3e3", lw=0.6, zorder=0)       # p_W = v
+        ax.plot([1 - v, 0.5 - v / 2], [0, H * (1 - v)], color="#e3e3e3", lw=0.6, zorder=0)   # p_L = v
+
+
+def fig_ternary_overview(post, out_dir: Path) -> list[Path]:
+    """All positions' posterior means in the full win/draw/loss triangle,
+    with the practically balanced band and the zoom window marked."""
+    plt = apply_style()
+    fig, ax = plt.subplots(figsize=(3.6, 3.3))
+    ternary_grid(ax)
+    lo, hi = band("escore")
+    ax.fill([lo, hi, hi, lo], [0, 0, H * (1 - 2 * (hi - 0.5)), H * (1 - 2 * (0.5 - lo))],
+            color=BAND_COLOUR, lw=0, zorder=0)
+    for sp in SELFPLAY_ENGINES:
+        s = ENGINES[sp]
+        g = post[post.engine == sp]
+        n = g[["white_wins", "draws", "black_wins"]].to_numpy(float) + PRIOR
+        pm = n / n.sum(axis=1, keepdims=True)
+        x, y = to_xy(pm)
+        ax.scatter(x, y, s=4, color=s.colour, alpha=0.45, lw=0, marker=s.marker, zorder=2)
+    x0, x1, y0, y1 = ZOOM
+    ax.plot([x0, x1, x1, x0, x0], [y0, y0, y1, y1, y0], color="#111111", lw=0.7,
+            ls=(0, (2, 2)), zorder=4)
+    ax.plot([0, 1, 0.5, 0], [0, 0, H, 0], color="#111111", lw=0.9, zorder=3)
+    kw = dict(fontsize=8, fontweight="bold", color="#111111")
+    ax.text(0.5, H + 0.03, "Draw", ha="center", va="bottom", **kw)
+    ax.text(-0.02, -0.03, "Black wins", ha="center", va="top", **kw)
+    ax.text(1.02, -0.03, "White wins", ha="center", va="top", **kw)
+    ax.set_xlim(-0.12, 1.12)
+    ax.set_ylim(-0.12, H + 0.1)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    return finish(fig, ax, "selfplay_ternary_overview", out_dir)
+
+
+ZOOM = (0.45, 0.72, H * 0.55, H * 1.0)    # x (E_score) and y (draw rate 55-100%)
+
+
+def hpd_levels(kde, sample: np.ndarray, masses=(0.5, 0.95)) -> list[float]:
+    dens = kde(sample)
+    return [float(np.quantile(dens, 1 - m)) for m in masses]
+
+
+def fig_ternary_zoom(post, deff: dict[str, float], sp: str, out_dir: Path) -> list[Path]:
+    """One engine's posterior distributions (50% and 95% highest-density
+    regions, clipped to the triangle) for contrasting positions, in the
+    draw-heavy corner of the triangle. x is White's expected score, y the draw
+    rate."""
+    plt = apply_style()
+    from matplotlib.patches import Polygon
+    x0, x1, y0, y1 = ZOOM
+    s = ENGINES[sp]
+    fig, ax = plt.subplots(figsize=(3.4, 3.3))
+    ternary_grid(ax)
+    lo, hi = band("escore")
+    ax.axvspan(lo, hi, color=BAND_COLOUR, lw=0, zorder=0)
+    tri = Polygon([[0, 0], [1, 0], [0.5, H]], closed=True, transform=ax.transData)
+    ax.plot([0, 1, 0.5, 0], [0, 0, H, 0], color="#111111", lw=0.9, zorder=3)
+    gx, gy = np.meshgrid(np.linspace(x0, x1, 300), np.linspace(y0, y1, 300))
+    g = post[post.engine == sp].set_index("position_id")
+    for pos in TERNARY_POSITIONS:
+        r = g.loc[pos]
+        draws = posterior_draws(r.white_wins, r.draws, r.black_wins, deff[sp],
+                                rng_for(sp, int(pos)), n=N_DRAWS)
+        x, y = to_xy(draws)
+        sub = np.vstack([x, y])[:, ::4]
+        kde = stats.gaussian_kde(sub)
+        z = kde(np.vstack([gx.ravel(), gy.ravel()])).reshape(gx.shape)
+        l50, l95 = hpd_levels(kde, sub)
+        layers = [ax.contourf(gx, gy, z, levels=[l95, z.max() + 1], colors=[s.colour], alpha=0.2,
+                              zorder=2),
+                  ax.contour(gx, gy, z, levels=[l95], colors=[s.colour], linewidths=0.8, zorder=2),
+                  ax.contour(gx, gy, z, levels=[l50], colors=[s.colour], linewidths=1.5, zorder=2)]
+        for layer in layers:
+            layer.set_clip_path(tri)
+        ax.text(x.mean() + 0.6 * (x.max() - x.min()) / 2 + 0.012, y.mean(), f"#{pos}",
+                fontsize=7.5, fontweight="bold", va="center", ha="left", color="#111111", zorder=5)
+    ax.set_xlim(x0, x1)
+    ax.set_ylim(y0, y1)
+    ax.set_aspect("equal")
+    ax.set_xlabel(METRICS["escore"].axis_label)
+    yt = np.arange(0.6, 1.01, 0.1)
+    ax.set_yticks(H * yt, [f"{v * 100:.0f}" for v in yt])
+    ax.set_ylabel("Draws (%)")
+    return finish(fig, ax, f"selfplay_ternary_zoom_{sp}", out_dir)
+
+
+def all_figures(post, top, agree, predictors, fair, out_dir: Path, deff=None) -> list[Path]:
     paths: list[Path] = []
     for metric in METRICS:
         for sp in SELFPLAY_ENGINES:
@@ -727,6 +830,10 @@ def all_figures(post, top, agree, predictors, fair, out_dir: Path) -> list[Path]
     paths += fig_prob_white(post, out_dir)
     paths += fig_decisive(post, predictors, fair, out_dir)
     paths += fig_white_share(post, out_dir)
+    paths += fig_ternary_overview(post, out_dir)
+    if deff is not None:
+        for sp in SELFPLAY_ENGINES:
+            paths += fig_ternary_zoom(post, deff, sp, out_dir)
     return paths
 
 
@@ -879,7 +986,7 @@ def main(argv: list[str] | None = None) -> int:
     (out / "selfplay_summary.txt").write_text(text)
     print(text)
     if not args.no_figures:
-        paths = all_figures(post, top, agree, predictors, fair, Path(args.figures_dir))
+        paths = all_figures(post, top, agree, predictors, fair, Path(args.figures_dir), deff=deff)
         print(f"wrote {len(paths) // 2} figures (PDF and PNG) to {args.figures_dir}")
     return 0
 
