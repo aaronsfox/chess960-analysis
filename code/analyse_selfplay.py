@@ -831,8 +831,96 @@ def fig_ternary(post, deff: dict[str, float], out_dir: Path) -> list[Path]:
     return paths
 
 
-def all_figures(post, top, agree, predictors, fair, out_dir: Path, deff=None) -> list[Path]:
+def save_fig(fig, name: str, out_dir: Path) -> list[Path]:
+    import matplotlib.pyplot as plt
+    out_dir.mkdir(parents=True, exist_ok=True)
+    paths = [out_dir / f"{name}.pdf", out_dir / f"{name}.png"]
+    for path in paths:
+        fig.savefig(path, metadata={"CreationDate": None} if path.suffix == ".pdf" else None)
+    plt.close(fig)
+    return paths
+
+
+def fig_vs_evaluation_panel(post, top, reg, out_dir: Path) -> list[Path]:
+    """Self-play Delta_Elo against the same engine's top-budget evaluation,
+    Stockfish and Caissa side by side on common axes, in the style of the
+    starting-position scatter matrix: one point per position, dotted line of
+    equality, solid least-squares line, #518 ringed, statistics in the corner."""
+    plt = apply_style()
+    from matplotlib.ticker import MultipleLocator
+    xs, ys = {}, {}
+    for sp in SELFPLAY_ENGINES:
+        y = post[post.engine == sp].set_index("position_id")["delta_elo_median"]
+        x = top[top.engine == sp].set_index("position_id").reindex(y.index)["delta_elo"]
+        xs[sp], ys[sp] = x, y
+    allv = pd.concat(list(xs.values()) + list(ys.values()))
+    lo, hi = float(allv.min()) - 8, float(allv.max()) + 8
+    fig, axes = plt.subplots(1, 2, figsize=(7.0, 3.6), sharex=True, sharey=True,
+                             gridspec_kw={"wspace": 0.1})
+    for ax, sp in zip(axes, SELFPLAY_ENGINES):
+        x, y = xs[sp], ys[sp]
+        r = reg[(reg.selfplay_engine == sp) & (reg.evaluation_engine == sp)
+                & (reg.metric == "delta_elo")].iloc[0]
+        ax.plot([lo, hi], [lo, hi], color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=1)
+        ax.scatter(x, y, s=7, color="#222222", alpha=0.35, lw=0, zorder=2)
+        grid = np.array([lo, hi])
+        ax.plot(grid, r.intercept + r.slope * grid, color="#111111", lw=1.1, zorder=3)
+        ax.scatter(x[STANDARD_POSITION_ID], y[STANDARD_POSITION_ID], s=40, facecolor="none",
+                   edgecolor="#111111", lw=1.2, zorder=4)
+        ax.text(0.05, 0.95,
+                f"slope = {r.slope:.2f} ({r.slope_se:.2f})\nintercept = {r.intercept:+.1f}\n"
+                f"R$^2$ = {r.r2:.2f}\nr = {r.pearson:.2f}",
+                transform=ax.transAxes, ha="left", va="top", fontsize=7.5, fontweight="bold",
+                linespacing=1.35)
+        ax.set_title(ENGINES[sp].label, fontsize=9, fontweight="bold")
+        ax.set_xlim(lo, hi)
+        ax.set_ylim(lo, hi)
+        ax.set_aspect("equal")
+        ax.xaxis.set_major_locator(MultipleLocator(25))
+        ax.yaxis.set_major_locator(MultipleLocator(25))
+        ax.set_xlabel(f"Evaluation {METRICS['delta_elo'].bold_symbol}")
+        bold_tick_labels(ax)
+    axes[0].set_ylabel(f"Self-play {METRICS['delta_elo'].bold_symbol}")
+    return save_fig(fig, "selfplay_balance_vs_evaluation", out_dir)
+
+
+def fig_ranked_panel(post, out_dir: Path) -> list[Path]:
+    """Positions ranked by posterior Delta_Elo with each position's 95%
+    credible interval as a vertical line, Stockfish and Caissa side by side
+    on a common scale; practically balanced band shaded; #518 marked."""
+    plt = apply_style()
+    fig, axes = plt.subplots(1, 2, figsize=(7.0, 3.0), sharey=True, gridspec_kw={"wspace": 0.08})
+    b0, b1 = band("delta_elo")
+    for ax, sp in zip(axes, SELFPLAY_ENGINES):
+        s = ENGINES[sp]
+        g = post[post.engine == sp].sort_values("delta_elo_median", ascending=False).reset_index(drop=True)
+        rank = np.arange(1, len(g) + 1)
+        ax.axhspan(b0, b1, color=BAND_COLOUR, lw=0, zorder=0)
+        ax.vlines(rank, g.delta_elo_lo, g.delta_elo_hi, color=s.colour, alpha=0.25, lw=0.6, zorder=1)
+        ax.plot(rank, g.delta_elo_median, color=s.colour, lw=1.4, zorder=2)
+        k = int(g.index[g.position_id == STANDARD_POSITION_ID][0])
+        ax.vlines(k + 1, g.loc[k, "delta_elo_lo"], g.loc[k, "delta_elo_hi"], color="#111111",
+                  lw=1.2, zorder=3)
+        ax.plot(k + 1, g.loc[k, "delta_elo_median"], marker=s.marker, ms=6, color="#111111",
+                mec="white", mew=0.9, ls="none", zorder=4)
+        above = int((g.delta_elo_lo > b1).sum())
+        ax.text(0.97, 0.95, f"Interval above +5: {above}\nOverlapping ±5: {len(g) - above}",
+                transform=ax.transAxes, ha="right", va="top", fontsize=7.5, fontweight="bold",
+                linespacing=1.35)
+        ax.set_title(s.label, fontsize=9, fontweight="bold")
+        ax.set_xlim(0, len(g) + 1)
+        ax.set_xlabel("Rank (1 = largest advantage for White)")
+        bold_tick_labels(ax)
+    axes[0].set_ylabel(METRICS["delta_elo"].axis_label)
+    return save_fig(fig, "selfplay_balance_ranked", out_dir)
+
+
+def all_figures(post, top, agree, predictors, fair, out_dir: Path, deff=None,
+                reg=None) -> list[Path]:
     paths: list[Path] = []
+    paths += fig_ranked_panel(post, out_dir)
+    if reg is not None:
+        paths += fig_vs_evaluation_panel(post, top, reg, out_dir)
     for metric in METRICS:
         for sp in SELFPLAY_ENGINES:
             paths += fig_vs_evaluation(post, top, sp, metric, out_dir)
@@ -996,7 +1084,8 @@ def main(argv: list[str] | None = None) -> int:
     (out / "selfplay_summary.txt").write_text(text)
     print(text)
     if not args.no_figures:
-        paths = all_figures(post, top, agree, predictors, fair, Path(args.figures_dir), deff=deff)
+        paths = all_figures(post, top, agree, predictors, fair, Path(args.figures_dir), deff=deff,
+                            reg=reg)
         print(f"wrote {len(paths) // 2} figures (PDF and PNG) to {args.figures_dir}")
     return 0
 

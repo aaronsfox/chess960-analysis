@@ -316,7 +316,11 @@ and follows the self-play analysis plan for Stockfish and Caissa:
   by advantage, fairness (|$\Delta_{\text{Elo}}$|), decisiveness and by
   P(at least as fair as and more decisive than #518).
 
-Ternary (win/draw/loss) figure `selfplay_ternary` (2 x 2): the top row places
+Main-text figures: `selfplay_balance_vs_evaluation` (self-play against
+evaluation $\Delta_{\text{Elo}}$, Stockfish and Caissa side by side, with the line of
+equality, least-squares line and statistics) and `selfplay_balance_ranked`
+(positions ranked by posterior $\Delta_{\text{Elo}}$ with each 95% credible interval,
+both engines side by side). Ternary (win/draw/loss) figure `selfplay_ternary` (2 x 2): the top row places
 every position's posterior mean in the full triangle (corners Black wins,
 White wins, draw), Stockfish left and Caissa right; the horizontal position
 is White's expected score and the height the draw rate, so the practically
