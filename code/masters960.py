@@ -397,9 +397,9 @@ def fig_case_positions(d: pd.DataFrame, eng: pd.DataFrame, out_dir: Path) -> lis
     fig, ax = plt.subplots(figsize=(3.6, 3.4))
     if len(pos):
         main_tc = d.groupby("position_id").tc_class.agg(lambda s: s.value_counts().index[0])
-        lo = min(pos.stockfish_selfplay_elo.min(), pos.advantage_lo.min(), 0) - 10
-        hi = max(pos.stockfish_selfplay_elo.max(), pos.advantage_hi.max()) + 10
-        ax.plot([lo, hi], [lo, hi], color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=1)
+        xlo = min(pos.stockfish_selfplay_elo.min(), 0) - 10
+        xhi = pos.stockfish_selfplay_elo.max() + 10
+        ax.plot([xlo, xhi], [xlo, xhi], color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=1)
         ax.axhline(0, color=BAND_COLOUR, lw=0.8, zorder=0)
         for _, r in pos.iterrows():
             st = TC_STYLE.get(main_tc[r.position_id], TC_STYLE["rapid"])
@@ -407,7 +407,7 @@ def fig_case_positions(d: pd.DataFrame, eng: pd.DataFrame, out_dir: Path) -> lis
                         yerr=[[r.advantage_elo - r.advantage_lo], [r.advantage_hi - r.advantage_elo]],
                         fmt=st["marker"], mfc=st["mfc"], color=st["color"], ms=4.5, elinewidth=0.8,
                         capsize=0, zorder=3)
-        ax.set_xlim(lo, hi)
+        ax.set_xlim(xlo, xhi)
     ax.set_xlabel(f"Stockfish Self-play {METRICS['delta_elo'].bold_symbol}")
     ax.set_ylabel(f"Master {METRICS['delta_elo'].bold_symbol}")
     bold_tick_labels(ax)
