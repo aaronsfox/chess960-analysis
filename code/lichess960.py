@@ -279,15 +279,49 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 # Summary
 # ---------------------------------------------------------------------------
 
-def summary_text(g: pd.DataFrame) -> str:
+SUMMARY_COLUMNS = ["month", "position_id", "category", "time_control", "estimated_s",
+                   "white_elo", "black_elo", "tournament", "white_berserk", "black_berserk",
+                   "termination", "score_white", "plies", "white_title", "black_title"]
+LOW_CARDINALITY = ["month", "category", "time_control", "termination", "white_title", "black_title"]
+
+
+def compact(df: pd.DataFrame) -> pd.DataFrame:
+    """Shrink a games table: repeated strings to categoricals, numbers to
+    small types. Millions of rows then fit in a few hundred MB."""
+    for c in LOW_CARDINALITY:
+        if c in df:
+            df[c] = df[c].astype("category")
+    for c in ("position_id", "estimated_s", "white_elo", "black_elo", "plies"):
+        if c in df:
+            df[c] = pd.to_numeric(df[c], downcast="integer")
+    if "score_white" in df:
+        df["score_white"] = df["score_white"].astype("float32")
+    return df
+
+
+def load_for_summary(files: list[Path]) -> tuple[pd.DataFrame, int]:
+    """Read only the columns the summary needs, one month at a time, and
+    count distinct players without keeping their IDs."""
+    parts, players = [], set()
+    for f in files:
+        ids = pd.read_parquet(f, columns=["white_id", "black_id"])
+        players.update(ids.white_id.unique()); players.update(ids.black_id.unique())
+        del ids
+        parts.append(compact(pd.read_parquet(f, columns=SUMMARY_COLUMNS)))
+    g = pd.concat(parts, ignore_index=True)
+    return compact(g), len(players)
+
+
+def summary_text(g: pd.DataFrame, n_players: int | None = None) -> str:
+    if n_players is None:
+        n_players = pd.concat([g.white_id, g.black_id]).nunique()
     L = ["Lichess rated Chess960: what we've got", "=" * 38, ""]
-    L.append(f"Games: {len(g):,} from {g.month.nunique()} month(s) ({g.month.min()} to {g.month.max()}); "
-             f"players: {pd.concat([g.white_id, g.black_id]).nunique():,}")
+    L.append(f"Games: {len(g):,} from {g.month.nunique()} month(s) ({min(g.month.astype(str))} to {max(g.month.astype(str))}); "
+             f"players: {n_players:,}")
     L.append(f"Unrecognised starting positions: {(g.position_id < 0).sum()}")
     L += ["", "By month and category:",
-          g.pivot_table(index="month", columns="category", values="game_id", aggfunc="size",
-                        fill_value=0).to_string()]
-    L += ["", "Most common time controls:", g.time_control.value_counts().head(12).to_string()]
+          pd.crosstab(g.month.astype(str), g.category.astype(str)).to_string()]
+    L += ["", "Most common time controls:", g.time_control.astype(str).value_counts().head(12).to_string()]
     for label, sub in (("all kept", g), ("5 min+ (estimated >= 300 s)", g[g.estimated_s >= 300]),
                        ("rapid+ (>= 480 s)", g[g.estimated_s >= 480])):
         per = sub[sub.position_id >= 0].groupby("position_id").size().reindex(range(960), fill_value=0)
@@ -305,12 +339,12 @@ def summary_text(g: pd.DataFrame) -> str:
         f"{k} {v:,}" for k, v in bands.value_counts().sort_index().items()))
     L += ["", f"Tournament games: {100 * g.tournament.mean():.1f}%; berserk (either side): "
           f"{100 * (g.white_berserk | g.black_berserk).mean():.1f}%",
-          "Terminations: " + ", ".join(f"{k} {v:,}" for k, v in g.termination.value_counts().items()),
+          "Terminations: " + ", ".join(f"{k} {v:,}" for k, v in g.termination.astype(str).value_counts().items()),
           "Results: White {:.1f}%, draw {:.1f}%, Black {:.1f}%; mean White score {:.4f}".format(
               100 * (g.score_white == 1).mean(), 100 * (g.score_white == 0.5).mean(),
               100 * (g.score_white == 0).mean(), g.score_white.mean())]
     L.append(f"Games with fewer than 10 plies: {(g.plies < 10).sum():,}; titled players in "
-             f"{100 * ((g.white_title != '') | (g.black_title != '')).mean():.1f}% of games")
+             f"{100 * ((g.white_title.astype(str) != '') | (g.black_title.astype(str) != '')).mean():.1f}% of games")
     return "\n".join(L) + "\n"
 
 
@@ -320,8 +354,8 @@ def cmd_summarise(args: argparse.Namespace) -> int:
     if not files:
         log.error("no parsed months under %s", out_dir / "raw")
         return 1
-    g = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
-    text = summary_text(g)
+    g, n_players = load_for_summary(files)
+    text = summary_text(g, n_players)
     (out_dir / "lichess960_summary.txt").write_text(text)
     print(text)
     return 0
