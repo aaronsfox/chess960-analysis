@@ -360,6 +360,30 @@ python code/lichess960.py summarise                         # counts for scoping
   `.pgn.zst` files with `wget` into `data/lichess/` (ignored by git) and pass
   `--pgn-dir data/lichess`.
 
+## Human play analysis (analyse_lichess960.py)
+
+```bash
+python code/analyse_lichess960.py all      # or: prepare, then analyse
+```
+
+- `prepare` filters the monthly tables into two sets analysed separately:
+  blitz (estimated 300–479 s) and rapid (≥ 480 s). In order, it drops
+  abandoned games and rules infractions, games under 10 plies, berserk games,
+  games missing a rating, games with a provisional player (|rating change|
+  > 30) and games with mean rating below 1200. Writes
+  `results/lichess960/prepared/` (regenerated, not committed), the flow
+  table, a randomisation check and the rating-change distribution.
+- `analyse` fits, per set: a fractional-logit rating model (White's
+  advantage at equal ratings; is the Lichess scale the Elo scale?); each
+  position's rating-adjusted human ΔElo; a REML random-effects
+  meta-regression across positions on Stockfish (primary) and Caissa
+  self-play ΔElo (tau, slope, reliability-corrected slope); and a game-level
+  model with a mean-rating interaction plus fits by rating band
+  (1200–1499, 1500–1799, 1800–1999, 2000+).
+- Tables: `results/lichess960/analysis/lichess960_*`. Figures:
+  `lichess960_human_vs_selfplay`, `lichess960_rating_bands`,
+  `lichess960_rating_calibration`, `lichess960_ranked`.
+
 ## Figures
 
 `code/plot_boards.py` draws labelled board diagrams of starting positions
