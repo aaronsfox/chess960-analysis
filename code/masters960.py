@@ -82,19 +82,43 @@ def load_sources(path: Path = SOURCES) -> pd.DataFrame:
 
 
 def download(sources: pd.DataFrame, out_dir: Path = DATA) -> None:
+    """Fetch every file in the sources table. The URL comes from the table, so
+    adding an event only needs a new row there."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    for r in sources.itertuples():
+    n = len(sources)
+    print(f"Downloading {n} PGN files into {out_dir}")
+    done, skipped, failed = [], [], []
+    for k, r in enumerate(sources.itertuples(), 1):
         dest = out_dir / r.file
+        tag = f"[{k:>2}/{n}] {r.file:<24}"
         if dest.exists() and dest.stat().st_size > 0:
-            log.info("%s: already here", r.file)
+            print(f"{tag} already here ({dest.stat().st_size / 1024:,.0f} KB, "
+                  f"{count_games(dest)} games), skipped")
+            skipped.append(r.file)
             continue
         try:
             req = urllib.request.Request(r.url, headers={"User-Agent": "chess960-fairness research"})
             with urllib.request.urlopen(req, timeout=60) as resp:
-                dest.write_bytes(resp.read())
-            log.info("%s: downloaded (%d bytes)", r.file, dest.stat().st_size)
+                body = resp.read()
+            if b"[Event" not in body[:5000]:
+                raise ValueError("response is not a PGN file (wrong URL or an error page?)")
+            dest.write_bytes(body)
+            print(f"{tag} downloaded {len(body) / 1024:,.0f} KB, {count_games(dest)} games "
+                  f"({r.event} {r.year}, {r.stage})")
+            done.append(r.file)
         except Exception as exc:          # noqa: BLE001 - report and carry on
-            log.warning("%s: failed (%s); save it by hand from %s", r.file, exc, r.url)
+            print(f"{tag} FAILED: {exc}")
+            failed.append(r)
+    print(f"\nDone: {len(done)} downloaded, {len(skipped)} already present, {len(failed)} failed.")
+    if failed:
+        print("Save these by hand into", out_dir, "(same file names), then run `parse`:")
+        for r in failed:
+            print(f"  {r.file}: {r.url}")
+
+
+def count_games(path: Path) -> int:
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        return sum(1 for line in fh if line.startswith("[Event "))
 
 
 def tc_class(base_s: float) -> str:
@@ -154,23 +178,46 @@ def game_record(h: dict[str, str], movetext: str, src: dict) -> dict:
 
 def parse(sources: pd.DataFrame, data_dir: Path = DATA, out: Path = OUT) -> pd.DataFrame:
     meta = {r["file"]: r for r in sources.to_dict("records")}
+    files = sorted(data_dir.glob("*.pgn"))
+    if not files:
+        raise SystemExit(f"no PGN files in {data_dir}; run `download` first")
+    print(f"Parsing {len(files)} PGN files from {data_dir}\n")
+    print(f"{'file':<24} {'games':>6} {'960 pos':>7} {'positions':>9} {'classical':>9} "
+          f"{'rapid':>6} {'blitz':>6} {'armag.':>6} {'no Elo':>6}  event")
     rows = []
-    for f in sorted(data_dir.glob("*.pgn")):
-        src = meta.get(f.name, {"file": f.name})
+    for f in files:
+        src = meta.get(f.name)
+        if src is None:
+            print(f"{f.name:<24} not in {SOURCES.name}: event details unknown, add a row for it")
+            src = {"file": f.name}
         with open(f, encoding="utf-8", errors="replace") as fh:
-            n = 0
-            for h, mt in iter_games(fh):
-                rows.append(game_record(h, mt, src))
-                n += 1
-        log.info("%s: %d games", f.name, n)
+            recs = [game_record(h, mt, src) for h, mt in iter_games(fh)]
+        rows += recs
+        r = pd.DataFrame(recs)
+        if r.empty:
+            print(f"{f.name:<24} {0:>6}  (no games found)")
+            continue
+        tc = r.tc_class.value_counts()
+        print(f"{f.name:<24} {len(r):>6} {(r.position_id >= 0).sum():>7} "
+              f"{r.position_id[r.position_id >= 0].nunique():>9} {tc.get('classical', 0):>9} "
+              f"{tc.get('rapid', 0):>6} {tc.get('blitz', 0):>6} {int(r.armageddon.sum()):>6} "
+              f"{int((r.white_elo.isna() | r.black_elo.isna()).sum()):>6}  "
+              f"{src.get('event', '?')} {src.get('year', '')}")
     g = pd.DataFrame(rows)
-    if g.empty:
-        raise SystemExit(f"no PGN files in {data_dir}")
     before = len(g)
     g = g.drop_duplicates(subset=["white", "black", "date", "round", "result", "fen", "plies"])
-    log.info("removed %d duplicate games", before - len(g))
+    unknown = g[g.position_id < 0]
+    print(f"\nTotal: {before:,} games; {before - len(g)} duplicates removed; {len(g):,} kept")
+    print(f"Starting position identified: {(g.position_id >= 0).sum():,}; distinct positions: "
+          f"{g.position_id[g.position_id >= 0].nunique()}")
+    if len(unknown):
+        print(f"No Chess960 position for {len(unknown)} games (missing or unusual FEN), e.g. "
+              f"{unknown.source.value_counts().head(3).to_dict()}")
+    top = g[g.position_id >= 0].position_id.value_counts().head(10)
+    print("Most-played positions: " + ", ".join(f"#{p} ({n})" for p, n in top.items()))
     out.mkdir(parents=True, exist_ok=True)
     g.to_csv(out / "masters960_games.csv", index=False)
+    print(f"Wrote {out / 'masters960_games.csv'}")
     return g
 
 
@@ -433,6 +480,7 @@ def summary_text(flow, ev, pos, pool, levels) -> str:
 def analyse(out: Path = OUT, figures: Path = FIGURES) -> None:
     g = pd.read_csv(out / "masters960_games.csv")
     d, flow = include(g)
+    print(f"Analysing {len(d):,} of {len(g):,} games after the inclusion criteria\n")
     eng = load_engines(SELFPLAY)
     ev, pos, pool = events_table(d), positions_table(d, eng), pooled(d, eng)
     levels = levels_comparison(pool)
@@ -444,8 +492,10 @@ def analyse(out: Path = OUT, figures: Path = FIGURES) -> None:
     text = summary_text(flow, ev, pos, pool, levels)
     (out / "masters960_summary.txt").write_text(text)
     print(text)
-    fig_case_positions(d, eng, figures)
-    fig_levels(levels, figures)
+    for path in fig_case_positions(d, eng, figures) + fig_levels(levels, figures):
+        if path.suffix == ".png":
+            print(f"Figure: {path}")
+    print(f"Tables: {out}/masters960_*.csv")
 
 
 def build_parser() -> argparse.ArgumentParser:
