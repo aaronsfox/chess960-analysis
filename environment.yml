@@ -9,7 +9,7 @@
 # the rest instead:
 #   conda create -n chess960 python=3.12 -y
 #   conda activate chess960
-#   pip install chess numpy pandas pyarrow scipy pytest matplotlib cairosvg
+#   pip install chess numpy pandas pyarrow scipy zstandard pytest matplotlib cairosvg
 name: chess960
 channels:
   - conda-forge
@@ -20,6 +20,7 @@ dependencies:
   - pandas>=2.2
   - pyarrow>=15
   - scipy>=1.11   # analysis (code/analyse_sp.py)
+  - zstandard>=0.22   # Lichess .pgn.zst exports (code/lichess960.py)
   - pytest>=8
   # Figures (code/plot_boards.py, code/analyse_sp.py). conda-forge's cairosvg brings the cairo
   # library with it, including on Windows.

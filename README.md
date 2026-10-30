@@ -336,6 +336,30 @@ Tables go to `results/selfplay/analysis/` (`selfplay_*.csv` and
 `selfplay_summary.txt`) and figures to `results/figures/` (`selfplay_*`),
 in the `plot_style.py` style.
 
+## Human play: Lichess Chess960 (lichess960.py)
+
+Rated Chess960 games from the monthly Lichess database exports
+(<https://database.lichess.org/chess960/>, CC0), parsed to one row per game
+with the starting position (0–959), ratings, time control, result,
+termination, tournament/berserk flags and hashed player IDs (no usernames are
+stored).
+
+```bash
+python code/lichess960.py fetch --months 2026-07:2026-09   # streams and parses
+python code/lichess960.py summarise                         # counts for scoping
+```
+
+- Kept while parsing: rated, Chess960, known result, and estimated duration
+  (base + 40 × increment, Lichess's definition) of at least `--min-seconds`
+  (default 180 s, i.e. blitz and slower). Categories: bullet < 180 s,
+  blitz < 480 s, rapid < 1500 s, classical ≥ 1500 s.
+- Output: `results/lichess960/raw/lichess960_YYYY-MM.parquet` (finished
+  months are skipped; `--overwrite` redoes them) and
+  `results/lichess960/lichess960_summary.txt`.
+- Needs internet access, so run it on the login node, or download the
+  `.pgn.zst` files with `wget` into `data/lichess/` (ignored by git) and pass
+  `--pgn-dir data/lichess`.
+
 ## Figures
 
 `code/plot_boards.py` draws labelled board diagrams of starting positions
