@@ -907,10 +907,59 @@ def fig_ranked_panel(post, out_dir: Path) -> list[Path]:
     return save_fig(fig, "selfplay_balance_ranked", out_dir)
 
 
+def fig_agreement_panel(post, agree, out_dir: Path) -> list[Path]:
+    """Agreement between Stockfish and Caissa self-play Delta_Elo (posterior
+    medians): left, Caissa against Stockfish with the line of equality and
+    Spearman's rho [95% CI]; right, Bland-Altman plot of the difference
+    (Caissa - Stockfish) against the mean, with the mean difference, 95%
+    limits of agreement and the fitted trend."""
+    plt = apply_style()
+    from matplotlib.ticker import MultipleLocator
+    a, b = SELFPLAY_ENGINES
+    A = post[post.engine == a].set_index("position_id")["delta_elo_median"]
+    B = post[post.engine == b].set_index("position_id")["delta_elo_median"].reindex(A.index)
+    r = agree[agree.metric == "delta_elo"].iloc[0]
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.0, 3.5), gridspec_kw={"wspace": 0.3})
+    lo = float(min(A.min(), B.min())) - 8
+    hi = float(max(A.max(), B.max())) + 8
+    ax1.plot([lo, hi], [lo, hi], color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=1)
+    ax1.scatter(A, B, s=7, color="#222222", alpha=0.35, lw=0, zorder=2)
+    ax1.text(0.05, 0.95, f"ρ = {r.spearman:.2f}\n[{r.spearman_lo:.2f}, {r.spearman_hi:.2f}]",
+             transform=ax1.transAxes, ha="left", va="top", fontsize=7.5, fontweight="bold",
+             linespacing=1.35)
+    ax1.set_xlim(lo, hi)
+    ax1.set_ylim(lo, hi)
+    ax1.set_aspect("equal")
+    ax1.xaxis.set_major_locator(MultipleLocator(25))
+    ax1.yaxis.set_major_locator(MultipleLocator(25))
+    ax1.set_xlabel(f"{ENGINES[a].label} {METRICS['delta_elo'].bold_symbol}")
+    ax1.set_ylabel(f"{ENGINES[b].label} {METRICS['delta_elo'].bold_symbol}")
+    mean, diff = (A + B) / 2, B - A
+    ax2.scatter(mean, diff, s=7, color="#222222", alpha=0.35, lw=0, zorder=2)
+    ax2.axhline(0, color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=1)
+    ax2.axhline(r.mean_difference, color="#111111", lw=1.1, zorder=3)
+    for v in (r.loa_low, r.loa_high):
+        ax2.axhline(v, color="#111111", lw=0.9, ls=(0, (4, 2)), zorder=3)
+    grid = np.linspace(mean.min(), mean.max(), 50)
+    fit = stats.linregress(mean, diff)
+    ax2.plot(grid, fit.intercept + fit.slope * grid, color="#111111", lw=0.9, ls=(0, (1, 1.5)),
+             zorder=3)
+    ax2.text(0.97, 0.95, (f"Mean difference = {r.mean_difference:+.1f}\n"
+             f"95% LoA = {r.loa_low:+.1f} to {r.loa_high:+.1f}").replace("-", "−"),
+             transform=ax2.transAxes, ha="right", va="top", fontsize=7.5, fontweight="bold",
+             linespacing=1.35)
+    ax2.set_xlabel(f"Mean {METRICS['delta_elo'].bold_symbol}")
+    ax2.set_ylabel(f"{ENGINES[b].label} − {ENGINES[a].label} {METRICS['delta_elo'].bold_symbol}")
+    for ax in (ax1, ax2):
+        bold_tick_labels(ax)
+    return save_fig(fig, "selfplay_agreement", out_dir)
+
+
 def all_figures(post, top, agree, predictors, fair, out_dir: Path, deff=None,
                 reg=None) -> list[Path]:
     paths: list[Path] = []
     paths += fig_ranked_panel(post, out_dir)
+    paths += fig_agreement_panel(post, agree, out_dir)
     if reg is not None:
         paths += fig_vs_evaluation_panel(post, top, reg, out_dir)
     for metric in METRICS:
