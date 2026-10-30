@@ -1,0 +1,63 @@
+Lichess rated Chess960: what we've got
+======================================
+
+Games: 5,627,521 from 24 month(s) (2024-10 to 2026-09); players: 414,901
+Unrecognised starting positions: 0
+
+By month and category:
+category   blitz  classical  rapid
+month                             
+2024-10   140584       1961  17320
+2024-11   148314       2203  20005
+2024-12   169744       2035  23857
+2025-01   199965       1830  27338
+2025-02   245434       2908  36368
+2025-03   220957       2445  32761
+2025-04   242140       2271  41595
+2025-05   238544       1668  40823
+2025-06   202381       1568  37592
+2025-07   215539       1650  34443
+2025-08   206385       2132  31898
+2025-09   181292       1608  30319
+2025-10   199602       1752  29046
+2025-11   172692       1782  31253
+2025-12   206710       2375  36517
+2026-01   221239       2586  38206
+2026-02   193494       2635  36793
+2026-03   205766       2867  40447
+2026-04   213126       2479  37907
+2026-05   214499       1958  35113
+2026-06   194159       1546  30575
+2026-07   189808       1383  29871
+2026-08   185633       1566  30983
+2026-09   189386       1591  30299
+
+Most common time controls:
+time_control
+180+0    1466591
+180+2    1123540
+300+0     817116
+300+3     653810
+600+0     205760
+600+5     121837
+180+3     119111
+180+1      91708
+120+2      87806
+300+5      60443
+300+2      54334
+240+0      52697
+
+Games per position, all kept: total 5,627,521; min 5537, median 5863, max 6175
+
+Games per position, 5 min+ (estimated >= 300 s): total 2,681,457; min 2631, median 2793, max 2966
+
+Games per position, rapid+ (>= 480 s): total 830,128; min 767, median 865, max 949
+
+Ratings (mean of the two players): p5: 1322, p25: 1560, p50: 1721, p75: 1862, p95: 2068
+Rating gap White - Black: p5: -323, p25: -83, p50: +0, p75: +82, p95: +322
+Games by mean-rating band: <1500 974,403, 1500-1799 2,648,836, 1800-1999 1,500,487, 2000-2199 425,515, 2200+ 78,280
+
+Tournament games: 28.1%; berserk (either side): 5.5%
+Terminations: Normal 4,353,153, Time forfeit 1,226,078, Abandoned 47,278, Insufficient material 849, Rules infraction 163
+Results: White 49.0%, draw 4.4%, Black 46.6%; mean White score 0.5122
+Games with fewer than 10 plies: 163,054; titled players in 4.7% of games

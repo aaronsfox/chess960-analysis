@@ -1,0 +1,17 @@
+set,step,criterion,games,removed
+blitz,0,"parsed (rated, blitz and slower)",5627521,
+blitz,1,time control,1851329,3776192.0
+blitz,2,not abandoned / rules infraction,1832688,18641.0
+blitz,3,at least 10 plies,1796246,36442.0
+blitz,4,no berserk,1669314,126932.0
+blitz,5,both ratings present,1669314,0.0
+blitz,6,no provisional rating (|change| <= 30),1308204,361110.0
+blitz,7,mean rating >= 1200,1300132,8072.0
+rapid,0,"parsed (rated, blitz and slower)",5627521,
+rapid,1,time control,830128,4797393.0
+rapid,2,not abandoned / rules infraction,825402,4726.0
+rapid,3,at least 10 plies,783422,41980.0
+rapid,4,no berserk,759321,24101.0
+rapid,5,both ratings present,759321,0.0
+rapid,6,no provisional rating (|change| <= 30),473197,286124.0
+rapid,7,mean rating >= 1200,445222,27975.0
