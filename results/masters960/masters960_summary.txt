@@ -1,0 +1,31 @@
+Master-level OTB Chess960: summary
+==================================
+
+Inclusion:
+  parsed: 1,212
+  starting position identified: 1,210
+  known result: 1,210
+  not Armageddon: 1,210
+  at least 10 plies (drops forfeits): 1,209
+  both FIDE ratings: 1,140
+
+Events/stages: 18; positions: 128; games per position: median 5, max 69; positions with >= 20 games: 8
+
+Pooled (rating gap as offset, position-clustered):
+  all / all: n 1,140, positions 128; W/D/L 39.3/27.7/33.0%; advantage +23.7 [+5.9, +41.5]; slope on Stockfish -0.41 [-1.50, 0.68]
+  time control / classical: n 649, positions 44; W/D/L 40.2/25.3/34.5%; advantage +21.4 [-2.2, +44.9]; slope on Stockfish 1.80 [0.07, 3.53]
+  time control / rapid: n 435, positions 87; W/D/L 38.4/30.8/30.8%; advantage +27.6 [+1.5, +53.8]; slope on Stockfish -0.44 [-2.04, 1.16]
+  time control / blitz: n 56, positions 5; W/D/L 35.7/32.1/32.1%; advantage +12.5 [-120.6, +145.6]; slope on Stockfish -2.03 [-4.75, 0.70]
+  rating / <2400: n 239, positions 8; W/D/L 45.2/15.9/38.9%; advantage +31.7 [-11.3, +74.8]; slope on Stockfish -1.74 [-7.19, 3.71]
+  rating / 2400-2599: n 200, positions 10; W/D/L 42.0/19.5/38.5%; advantage -12.3 [-88.8, +64.2]; slope on Stockfish 3.59 [-1.13, 8.31]
+  rating / 2600+: n 701, positions 127; W/D/L 36.5/34.1/29.4%; advantage +27.8 [+6.6, +49.0]; slope on Stockfish -0.61 [-1.68, 0.45]
+
+Case-study positions (>= 20 games):
+  #9: n 69, classical; W/D/L 39/22/39%; master -23 [-127, +82]; Stockfish +11, Caissa +32  (grenke Freestyle Open Karlsruhe)
+  #130: n 69, classical; W/D/L 46/17/36%; master +43 [-38, +124]; Stockfish +19, Caissa +23  (grenke Freestyle Open Karlsruhe)
+  #758: n 69, classical; W/D/L 49/0/51%; master -42 [-133, +50]; Stockfish +18, Caissa +30  (grenke Freestyle Open Karlsruhe)
+  #228: n 68, classical; W/D/L 46/22/32%; master +38 [-52, +128]; Stockfish +15, Caissa +23  (grenke Freestyle Open Karlsruhe)
+  #380: n 68, classical; W/D/L 28/43/29%; master -15 [-95, +65]; Stockfish +9, Caissa +1  (grenke Freestyle Open Karlsruhe)
+  #302: n 68, classical; W/D/L 34/21/46%; master -30 [-125, +66]; Stockfish +0, Caissa +21  (grenke Freestyle Open Karlsruhe)
+  #630: n 67, classical; W/D/L 48/25/27%; master +48 [-38, +134]; Stockfish +24, Caissa +55  (grenke Freestyle Open Karlsruhe)
+  #76: n 67, classical; W/D/L 37/31/31%; master +58 [-19, +135]; Stockfish +8, Caissa +19  (grenke Freestyle Open Karlsruhe)
