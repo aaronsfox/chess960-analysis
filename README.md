@@ -407,6 +407,23 @@ the FIDE rating gap as an offset (beta = 1) with position-clustered SEs.
 Figures: `masters960_case_positions` and `masters960_levels` (White's
 advantage and draw rate from Lichess club level to engines).
 
+## Human play against engine self-play (compare_levels.py)
+
+```bash
+python code/compare_levels.py
+```
+
+Applies the self-play Dirichlet model to the human games: for each source
+(Stockfish and Caissa self-play, Lichess blitz/rapid/titled, master OTB) and
+position, Dirichlet(1/2 + counts / DEFF) with DEFF from self-play for the
+engines and 1 for humans. Writes `results/compare_levels/` (posteriors per
+source and position, per-source summary, Spearman agreement with the engines
+for Delta_Elo and the draw rate) and the figures `compare_ternary` (all
+sources in the win/draw/loss triangle; HPD regions for #868, #518, #674, #226)
+and `compare_ternary_masters` (the eight positions with most master games).
+Needs the outputs of analyse_selfplay.py, analyse_lichess960.py and
+masters960.py.
+
 ## Figures
 
 `code/plot_boards.py` draws labelled board diagrams of starting positions

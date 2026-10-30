@@ -225,7 +225,26 @@ def parse(sources: pd.DataFrame, data_dir: Path = DATA, out: Path = OUT) -> pd.D
 # Analysis
 # ---------------------------------------------------------------------------
 
+def fill_ratings(g: pd.DataFrame) -> pd.DataFrame:
+    """Fill a missing FIDE rating from the same player's other games in the
+    same event (some rounds are published without ratings)."""
+    g = g.copy()
+    long = pd.concat([g[["event", "white", "white_elo"]].set_axis(["event", "player", "elo"], axis=1),
+                      g[["event", "black", "black_elo"]].set_axis(["event", "player", "elo"], axis=1)])
+    known = long.dropna().groupby(["event", "player"]).elo.median()
+    for side in ("white", "black"):
+        miss = g[f"{side}_elo"].isna()
+        idx = pd.MultiIndex.from_frame(g.loc[miss, ["event", side]])
+        g.loc[miss, f"{side}_elo"] = known.reindex(idx).to_numpy()
+    return g
+
+
 def include(g: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    n_missing = int((g.white_elo.isna() | g.black_elo.isna()).sum())
+    g = fill_ratings(g)
+    print(f"Ratings: {n_missing} games missing one; "
+          f"{n_missing - int((g.white_elo.isna() | g.black_elo.isna()).sum())} filled from the same "
+          "player's other games in the event")
     steps = [("starting position identified", g.position_id >= 0),
              ("known result", g.score_white.notna()),
              ("not Armageddon", ~g.armageddon.astype(bool)),

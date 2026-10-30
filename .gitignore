@@ -19,6 +19,7 @@ results/*
 !results/pilot/
 !results/lichess960/
 !results/masters960/
+!results/compare_levels/
 logs/
 data/lichess/
 data/masters/
