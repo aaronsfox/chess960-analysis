@@ -50,7 +50,7 @@ def test_stage2_recovers_slope_and_tau(sim):
     d, eng, true = sim
     rm = A.rating_model(d)
     pos = A.stage1(d, rm["_b"][1])
-    assert np.median(pos.se_ratio_white_cluster) == pytest.approx(1, abs=0.05)
+    assert np.median(pos.se_ratio_pair_cluster) == pytest.approx(1, abs=0.05)
     pos, meta, dec = A.stage2(pos, eng)
     sl = meta[(meta.model == "slope") & (meta.predictor == "stockfish")].iloc[0]
     assert sl.gamma_lo < 0.5 < sl.gamma_hi
@@ -86,7 +86,8 @@ def test_filters_in_order():
         "black_elo": [1600, 1600, 1600, 1600, 1600, 1600, 1100, 1600, 1600],
         "white_rating_diff": [5, 5, 5, 5, 5, 120, 5, 5, 5],
         "black_rating_diff": [-5] * 9,
+        "white_title": "", "black_title": "",
     })
     kept, flow = A.apply_filters(g, 300, 480)
     assert list(kept.index) == [0]
-    assert [n for _, n in flow] == [9, 7, 6, 5, 4, 3, 2, 1]
+    assert [n for _, n in flow] == [9, 7, 7, 6, 5, 4, 3, 2, 1]

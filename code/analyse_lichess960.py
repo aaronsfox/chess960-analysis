@@ -81,7 +81,8 @@ CALIBRATION_BINS = np.arange(-400, 401, 50)
 
 RAW_COLUMNS = ["month", "game_id", "position_id", "estimated_s", "white_elo", "black_elo",
                "white_rating_diff", "black_rating_diff", "white_berserk", "black_berserk",
-               "termination", "score_white", "plies", "white_id", "black_id", "tournament"]
+               "termination", "score_white", "plies", "white_id", "black_id", "tournament",
+               "white_title", "black_title"]
 
 
 # ---------------------------------------------------------------------------
@@ -101,8 +102,10 @@ def filter_steps(g: pd.DataFrame, lo: float, hi: float) -> list[tuple[str, pd.Se
     """Inclusion criteria in order, each as (label, keep mask)."""
     big_change = (g.white_rating_diff.abs() > PROVISIONAL_CHANGE) | \
                  (g.black_rating_diff.abs() > PROVISIONAL_CHANGE)
+    bot = (g.white_title == "BOT") | (g.black_title == "BOT")
     return [
         ("time control", (g.estimated_s >= lo) & (g.estimated_s < hi)),
+        ("no bot accounts", ~bot),
         ("not abandoned / rules infraction", ~g.termination.isin(BAD_TERMINATIONS)),
         (f"at least {MIN_PLIES} plies", g.plies >= MIN_PLIES),
         ("no berserk", ~(g.white_berserk | g.black_berserk)),
@@ -135,6 +138,12 @@ def compact_set(g: pd.DataFrame) -> pd.DataFrame:
         "time_forfeit": (g.termination == "Time forfeit").to_numpy(),
     })
     return out.reset_index(drop=True)
+
+
+def pair_codes(white: np.ndarray, black: np.ndarray) -> np.ndarray:
+    """One code per unordered pair of players (a rematch swaps colours)."""
+    a, b = np.minimum(white, black), np.maximum(white, black)
+    return pd.factorize(pd.MultiIndex.from_arrays([a, b]))[0]
 
 
 def randomisation_check(pos: pd.Series) -> dict:
@@ -186,7 +195,13 @@ def prepare(raw_dir: Path = RAW, out_dir: Path = PREPARED, tables: Path = OUT_TA
             flow_rows.append({"set": s, "step": step, "criterion": label, "games": n,
                               "removed": None if prev is None else prev - n})
             prev = n
-        rand_rows.append({"set": s, **randomisation_check(d.position_id)})
+        rand_rows.append({"set": s, "games_counted": "all", **randomisation_check(d.position_id)})
+        # Lichess rematches keep the starting position, so count each
+        # pair-position series once: positions are drawn per series.
+        series = pd.DataFrame({"pair": pair_codes(d.white_id.to_numpy(), d.black_id.to_numpy()),
+                               "pos": d.position_id}).drop_duplicates()
+        rand_rows.append({"set": s, "games_counted": "first per pair and position",
+                          **randomisation_check(series.pos)})
         log.info("%s: %d games kept", s, len(d))
     pd.DataFrame(flow_rows).to_csv(tables / "lichess960_flow.csv", index=False)
     pd.DataFrame(rand_rows).to_csv(tables / "lichess960_randomisation.csv", index=False)
@@ -260,9 +275,8 @@ def calibration(d: pd.DataFrame, b: np.ndarray) -> pd.DataFrame:
 
 def stage1(d: pd.DataFrame, beta: float) -> pd.DataFrame:
     """One intercept per position with the rating gap as an offset: White's
-    human advantage at equal ratings, in Elo, with robust SE. Also SEs
-    clustered on the White and on the Black player within each position, as
-    a check that repeat players don't matter."""
+    human advantage at equal ratings, in Elo, with SEs clustered on the
+    player pair within each position (rematches)."""
     pos = d.position_id.to_numpy(np.int64)
     y = d.score_white.to_numpy(float)
     off = beta * rating_x(d)
@@ -278,18 +292,23 @@ def stage1(d: pd.DataFrame, beta: float) -> pd.DataFrame:
     p = special.expit(a[pos] + off)
     r = y - p
     h = np.bincount(pos, p * (1 - p), N_POSITIONS)
-    se = np.sqrt(np.bincount(pos, r ** 2, N_POSITIONS)) / h
-    out = {"position_id": np.arange(N_POSITIONS), "games": np.bincount(pos, minlength=N_POSITIONS),
+    se_game = np.sqrt(np.bincount(pos, r ** 2, N_POSITIONS)) / h
+    # Rematches between the same two players keep the position, so cluster
+    # on the (unordered) pair within each position; this SE is the one used.
+    pair = pair_codes(d.white_id.to_numpy(), d.black_id.to_numpy())
+    sums = pd.DataFrame({"pos": pos, "pair": pair, "r": r}).groupby(["pos", "pair"], sort=False).r.sum()
+    se = np.sqrt((sums ** 2).groupby(level=0).sum().reindex(range(N_POSITIONS), fill_value=0)
+                 .to_numpy()) / h
+    n = np.bincount(pos, minlength=N_POSITIONS)
+    out = {"position_id": np.arange(N_POSITIONS), "games": n,
            "white_wins": np.bincount(pos, y == 1, N_POSITIONS).astype(int),
            "draws": np.bincount(pos, y == 0.5, N_POSITIONS).astype(int),
            "black_wins": np.bincount(pos, y == 0, N_POSITIONS).astype(int),
-           "escore_observed": np.bincount(pos, y, N_POSITIONS) / np.bincount(pos, minlength=N_POSITIONS),
-           "human_elo": K * a, "human_se": K * se}
-    for side in ("white", "black"):
-        s = pd.DataFrame({"pos": pos, "pl": d[f"{side}_id"].to_numpy(), "r": r}) \
-            .groupby(["pos", "pl"], sort=False).r.sum()
-        cl = np.sqrt((s ** 2).groupby(level=0).sum().reindex(range(N_POSITIONS), fill_value=0))
-        out[f"se_ratio_{side}_cluster"] = cl.to_numpy() / h / se
+           "escore_observed": np.bincount(pos, y, N_POSITIONS) / n,
+           "human_elo": K * a, "human_se": K * se,
+           "human_lo": K * (a - 1.96 * se), "human_hi": K * (a + 1.96 * se),
+           "se_ratio_pair_cluster": se / se_game}
+    out["rank_raw"] = pd.Series(out["human_elo"]).rank(ascending=False, method="min").astype(int).to_numpy()
     return pd.DataFrame(out)
 
 
@@ -551,18 +570,20 @@ def fig_calibration(cal: dict, out_dir: Path) -> list[Path]:
 
 
 def fig_ranked(positions: dict, out_dir: Path) -> list[Path]:
-    """Positions ranked by shrunken human Delta_Elo with 95% intervals; #518 black."""
+    """Positions ranked by their rating-adjusted human Delta_Elo with 95%
+    CIs (stage 1, unshrunk: with tau near zero the shrunken values are all
+    equal); #518 black."""
     plt = apply_style()
     fig, axes = plt.subplots(1, len(SETS), figsize=(7.0, 3.0), sharey=True, gridspec_kw={"wspace": 0.08})
     for ax, s in zip(axes, SETS):
-        g = positions[s].sort_values("shrunk_elo", ascending=False).reset_index(drop=True)
+        g = positions[s].sort_values("human_elo", ascending=False).reset_index(drop=True)
         rank = np.arange(1, len(g) + 1)
         ax.axhline(0, color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=0)
-        ax.vlines(rank, g.shrunk_lo, g.shrunk_hi, color=SET_STYLE[s]["color"], alpha=0.25, lw=0.6)
-        ax.plot(rank, g.shrunk_elo, color=SET_STYLE[s]["color"], lw=1.4)
+        ax.vlines(rank, g.human_lo, g.human_hi, color=SET_STYLE[s]["color"], alpha=0.25, lw=0.6)
+        ax.plot(rank, g.human_elo, color=SET_STYLE[s]["color"], lw=1.4)
         k = int(g.index[g.position_id == STANDARD_POSITION_ID][0])
-        ax.vlines(k + 1, g.loc[k, "shrunk_lo"], g.loc[k, "shrunk_hi"], color="#111111", lw=1.2, zorder=3)
-        ax.plot(k + 1, g.loc[k, "shrunk_elo"], "o", color="#111111", ms=4, zorder=4)
+        ax.vlines(k + 1, g.loc[k, "human_lo"], g.loc[k, "human_hi"], color="#111111", lw=1.2, zorder=3)
+        ax.plot(k + 1, g.loc[k, "human_elo"], "o", color="#111111", ms=4, zorder=4)
         ax.set_xlim(0, 961)
         ax.set_title(SET_LABELS[s], fontsize=9, fontweight="bold")
         ax.set_xlabel("Position Rankings")
@@ -598,15 +619,15 @@ def summary_text(res: dict) -> str:
                      f"intercept at engine 0 {m.intercept_at_engine_zero:+.1f}; residual tau "
                      f"{m.tau:.1f}; tau^2 explained {m.tau2_explained:.2f}; rho {m.spearman_rho:.3f}")
         p518 = r["positions"].set_index("position_id").loc[STANDARD_POSITION_ID]
-        L.append(f"#518: {p518.games:,} games, raw {p518.human_elo:+.1f} (SE {p518.human_se:.1f}); "
-                 f"shrunk {p518.shrunk_elo:+.1f} [{p518.shrunk_lo:+.1f}, {p518.shrunk_hi:+.1f}]; "
-                 f"rank {p518.rank_shrunk}")
+        L.append(f"#518: {p518.games:,.0f} games, {p518.human_elo:+.1f} [{p518.human_lo:+.1f}, "
+                 f"{p518.human_hi:+.1f}]; raw rank {p518.rank_raw:.0f}; shrunk {p518.shrunk_elo:+.1f}")
         sep = r["positions"]
-        L.append(f"Shrunk intervals entirely above 0: {(sep.shrunk_lo > 0).sum()}; below 0: "
-                 f"{(sep.shrunk_hi < 0).sum()}")
-        L.append("Player clustering: median SE ratio White-clustered "
-                 f"{np.nanmedian(sep.se_ratio_white_cluster):.3f}, Black-clustered "
-                 f"{np.nanmedian(sep.se_ratio_black_cluster):.3f}")
+        L.append(f"Per-position 95% CIs entirely above 0: {(sep.human_lo > 0).sum()}; below 0: "
+                 f"{(sep.human_hi < 0).sum()}; excluding the pooled mean {null.mu:+.1f}: "
+                 f"{((sep.human_lo > null.mu) | (sep.human_hi < null.mu)).sum()} (about 48 expected "
+                 "by chance if all positions were equal)")
+        L.append(f"Rematch clustering: median SE ratio (pair-clustered / per game) "
+                 f"{np.nanmedian(sep.se_ratio_pair_cluster):.3f}")
         L.append("Game-level model (Stockfish, position-clustered SEs):")
         for _, t in r["inter"].iterrows():
             L.append(f"  {t.term}: {t.estimate:+.3f} [{t.lo:+.3f}, {t.hi:+.3f}] (p {t.p:.3g})")

@@ -368,7 +368,7 @@ python code/analyse_lichess960.py all      # or: prepare, then analyse
 
 - `prepare` filters the monthly tables into two sets analysed separately:
   blitz (estimated 300–479 s) and rapid (≥ 480 s). In order, it drops
-  abandoned games and rules infractions, games under 10 plies, berserk games,
+  bot accounts, abandoned games and rules infractions, games under 10 plies, berserk games,
   games missing a rating, games with a provisional player (|rating change|
   > 30) and games with mean rating below 1200. Writes
   `results/lichess960/prepared/` (regenerated, not committed), the flow
