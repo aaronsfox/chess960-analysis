@@ -373,6 +373,9 @@ python code/analyse_lichess960.py all      # or: prepare, then analyse
   > 30) and games with mean rating below 1200. Writes
   `results/lichess960/prepared/` (regenerated, not committed), the flow
   table, a randomisation check and the rating-change distribution.
+- A third set, `titled` (both players titled, 3 min+), gives an online
+  master-level check; it is too sparse per position, so only the pooled
+  game-level slope is reported for it.
 - `analyse` fits, per set: a fractional-logit rating model (White's
   advantage at equal ratings; is the Lichess scale the Elo scale?); each
   position's rating-adjusted human ΔElo; a REML random-effects
@@ -383,6 +386,26 @@ python code/analyse_lichess960.py all      # or: prepare, then analyse
 - Tables: `results/lichess960/analysis/lichess960_*`. Figures:
   `lichess960_human_vs_selfplay`, `lichess960_rating_bands`,
   `lichess960_rating_calibration`, `lichess960_ranked`.
+
+## Master-level games (masters960.py)
+
+Over-the-board Chess960 / Freestyle events (Freestyle Grand Slam Tour, grenke
+Freestyle Open, FIDE World Fischer Random Championship, Champions Showdown
+9LX), as TWIC PGN files listed in `config/masters960_sources.csv`.
+
+```bash
+python code/masters960.py download   # into data/masters/ (ignored by git); or save files there by hand
+python code/masters960.py parse      # -> results/masters960/masters960_games.csv
+python code/masters960.py analyse    # tables, summary and figures
+```
+
+Events draw one position per round for every board, so the data are many
+games on a few dozen positions (case studies). Armageddon games and forfeits
+are excluded; time-control class (classical/rapid/blitz) comes from the event
+and, for faster tiebreaks within a file, from the games' own clocks. Models use
+the FIDE rating gap as an offset (beta = 1) with position-clustered SEs.
+Figures: `masters960_case_positions` and `masters960_levels` (White's
+advantage and draw rate from Lichess club level to engines).
 
 ## Figures
 

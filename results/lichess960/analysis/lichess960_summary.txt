@@ -8,7 +8,7 @@ Rating model: White advantage at equal ratings +10.5 [+9.8, +11.1] Elo; rating-g
 Positions: mean SE 10.1 Elo; tau 2.3 [0.0, 3.9] Elo (LRT 1.27, p 0.129); human reliability 0.05
   on stockfish: slope 0.014 [-0.028, 0.057] (p 0.514); corrected 0.017; intercept at engine 0 +10.2; residual tau 2.3; tau^2 explained -0.01; rho 0.049
   on caissa: slope 0.025 [-0.013, 0.063] (p 0.193); corrected 0.033; intercept at engine 0 +9.8; residual tau 2.3; tau^2 explained 0.01; rho 0.056
-#518: 1,248 games, +8.6 [-11.9, +29.1]; raw rank 541; shrunk +10.4
+#518: 1,248 games, +8.6 [-11.9, +29.1]; raw rank 541.0; shrunk +10.4
 Per-position 95% CIs entirely above 0: 183; below 0: 2; excluding the pooled mean +10.5: 52 (about 48 expected by chance if all positions were equal)
 Rematch clustering: median SE ratio (pair-clustered / per game) 0.998
 Game-level model (Stockfish, position-clustered SEs):
@@ -17,6 +17,9 @@ Game-level model (Stockfish, position-clustered SEs):
   gamma: +0.016 [-0.022, +0.054] (p 0.418)
   delta_elo_per_100: +1.286 [+0.929, +1.643] (p 1.64e-12)
   eta_gamma_per_100: +0.004 [-0.022, +0.029] (p 0.784)
+  pooled_advantage_elo: +10.481 [+9.827, +11.135] (p 8.98e-217)
+  pooled_beta: +1.120 [+1.115, +1.125] (p 0)
+  pooled_gamma: +0.014 [-0.023, +0.051] (p 0.458)
 By rating band: advantage Elo [CI]; slope [CI]
   1200-1499: n 166,868; +6.9 [+5.2, +8.7]; -0.097 [-0.203, 0.009]
   1500-1799: n 745,936; +10.1 [+9.2, +10.9]; 0.050 [-0.005, 0.106]
@@ -30,7 +33,7 @@ Rating model: White advantage at equal ratings +9.7 [+8.6, +10.8] Elo; rating-ga
 Positions: mean SE 17.3 Elo; tau 0.0 [0.0, 4.4] Elo (LRT 0.00, p 1); human reliability 0.00
   on stockfish: slope 0.037 [-0.035, 0.108] (p 0.313); corrected 0.044; intercept at engine 0 +8.9; residual tau 0.0; tau^2 explained nan; rho 0.021
   on caissa: slope 0.021 [-0.042, 0.085] (p 0.508); corrected 0.028; intercept at engine 0 +9.1; residual tau 0.0; tau^2 explained nan; rho -0.002
-#518: 423 games, +24.6 [-8.4, +57.6]; raw rank 175; shrunk +9.6
+#518: 423 games, +24.6 [-8.4, +57.6]; raw rank 175.0; shrunk +9.6
 Per-position 95% CIs entirely above 0: 83; below 0: 4; excluding the pooled mean +9.6: 44 (about 48 expected by chance if all positions were equal)
 Rematch clustering: median SE ratio (pair-clustered / per game) 0.996
 Game-level model (Stockfish, position-clustered SEs):
@@ -39,8 +42,18 @@ Game-level model (Stockfish, position-clustered SEs):
   gamma: +0.003 [-0.089, +0.095] (p 0.948)
   delta_elo_per_100: +1.365 [+0.696, +2.034] (p 6.41e-05)
   eta_gamma_per_100: -0.021 [-0.063, +0.020] (p 0.313)
+  pooled_advantage_elo: +9.683 [+8.609, +10.756] (p 6.83e-70)
+  pooled_beta: +1.164 [+1.154, +1.173] (p 0)
+  pooled_gamma: +0.037 [-0.029, +0.104] (p 0.271)
 By rating band: advantage Elo [CI]; slope [CI]
   1200-1499: n 123,934; +8.1 [+6.1, +10.2]; 0.056 [-0.069, 0.182]
   1500-1799: n 260,645; +9.8 [+8.4, +11.1]; 0.041 [-0.045, 0.127]
   1800-1999: n 35,404; +14.4 [+10.6, +18.2]; -0.010 [-0.246, 0.226]
   2000+: n 3,325; +7.6 [-5.0, +20.3]; -0.456 [-1.206, 0.294]
+
+Titled (3 min+) (8,223 games, 1,120 players)
+----------------------------------------
+W/D/L 46.5 / 10.6 / 42.9%; E_score 0.5181; raw Delta_Elo +12.6
+Rating model: White advantage at equal ratings +13.6 [+5.4, +21.8] Elo; beta 1.033
+Games per position: median 8; per-position models not fitted (too sparse)
+Pooled game-level slope on Stockfish self-play (position-clustered): 0.402 [-0.142, 0.945] (p 0.147)

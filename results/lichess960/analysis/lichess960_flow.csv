@@ -17,3 +17,13 @@ rapid,5,no berserk,718311,24099.0
 rapid,6,both ratings present,718311,0.0
 rapid,7,no provisional rating (|change| <= 30),432880,285431.0
 rapid,8,mean rating >= 1200,423308,9572.0
+titled,0,"parsed (rated, blitz and slower)",5627521,
+titled,1,time control,5627521,0.0
+titled,2,no bot accounts,5539729,87792.0
+titled,3,both players titled,14851,5524878.0
+titled,4,not abandoned / rules infraction,14774,77.0
+titled,5,at least 10 plies,14666,108.0
+titled,6,no berserk,10311,4355.0
+titled,7,both ratings present,10311,0.0
+titled,8,no provisional rating (|change| <= 30),8223,2088.0
+titled,9,mean rating >= 1200,8223,0.0

@@ -67,8 +67,13 @@ OUT_FIGURES = REPO_ROOT / "results" / "figures"
 SELFPLAY_POSTERIORS = REPO_ROOT / "results" / "selfplay" / "analysis" / "selfplay_posteriors.csv"
 
 K = 400 / np.log(10)                 # logit -> Elo
-SETS = {"blitz": (300, 480), "rapid": (480, np.inf)}   # estimated seconds, [lo, hi)
-SET_LABELS = {"blitz": "Blitz", "rapid": "Rapid"}
+SETS = {"blitz": (300, 480), "rapid": (480, np.inf),   # estimated seconds, [lo, hi)
+        "titled": (180, np.inf)}                       # online master level: both players titled
+TITLED_SETS = {"titled"}
+MAIN_SETS = ("blitz", "rapid")                         # the figures
+SET_LABELS = {"blitz": "Blitz", "rapid": "Rapid", "titled": "Titled (3 min+)"}
+HUMAN_TITLES = {"GM", "IM", "FM", "CM", "NM", "WGM", "WIM", "WFM", "WCM"}   # not BOT or LM
+MIN_BAND_GAMES = 1000
 BAD_TERMINATIONS = {"Abandoned", "Rules infraction"}
 MIN_PLIES = 10
 PROVISIONAL_CHANGE = 30              # |rating change| above this = provisional (high RD)
@@ -98,7 +103,7 @@ def hex_to_int(s: pd.Series) -> np.ndarray:
     return np.array([int(x, 16) for x in s.astype(str)], dtype=np.int64)
 
 
-def filter_steps(g: pd.DataFrame, lo: float, hi: float) -> list[tuple[str, pd.Series]]:
+def filter_steps(g: pd.DataFrame, lo: float, hi: float, titled: bool = False) -> list[tuple[str, pd.Series]]:
     """Inclusion criteria in order, each as (label, keep mask)."""
     big_change = (g.white_rating_diff.abs() > PROVISIONAL_CHANGE) | \
                  (g.black_rating_diff.abs() > PROVISIONAL_CHANGE)
@@ -106,6 +111,8 @@ def filter_steps(g: pd.DataFrame, lo: float, hi: float) -> list[tuple[str, pd.Se
     return [
         ("time control", (g.estimated_s >= lo) & (g.estimated_s < hi)),
         ("no bot accounts", ~bot),
+    ] + ([("both players titled", g.white_title.isin(HUMAN_TITLES) & g.black_title.isin(HUMAN_TITLES))]
+         if titled else []) + [
         ("not abandoned / rules infraction", ~g.termination.isin(BAD_TERMINATIONS)),
         (f"at least {MIN_PLIES} plies", g.plies >= MIN_PLIES),
         ("no berserk", ~(g.white_berserk | g.black_berserk)),
@@ -115,10 +122,11 @@ def filter_steps(g: pd.DataFrame, lo: float, hi: float) -> list[tuple[str, pd.Se
     ]
 
 
-def apply_filters(g: pd.DataFrame, lo: float, hi: float) -> tuple[pd.DataFrame, list[tuple[str, int]]]:
+def apply_filters(g: pd.DataFrame, lo: float, hi: float,
+                  titled: bool = False) -> tuple[pd.DataFrame, list[tuple[str, int]]]:
     flow = [("parsed (rated, blitz and slower)", len(g))]
     keep = pd.Series(True, index=g.index)
-    for label, mask in filter_steps(g, lo, hi):
+    for label, mask in filter_steps(g, lo, hi, titled):
         keep &= mask.fillna(False).astype(bool)
         flow.append((label, int(keep.sum())))
     return g[keep], flow
@@ -174,7 +182,7 @@ def prepare(raw_dir: Path = RAW, out_dir: Path = PREPARED, tables: Path = OUT_TA
         g = g[~dup]
         seen.update(g.game_id)
         for s, (lo, hi) in SETS.items():
-            kept, flow = apply_filters(g, lo, hi)
+            kept, flow = apply_filters(g, lo, hi, s in TITLED_SETS)
             parts[s].append(compact_set(kept))
             counts = np.array([c for _, c in flow])
             flows[s] = (flow if flows[s] is None else
@@ -308,8 +316,12 @@ def stage1(d: pd.DataFrame, beta: float) -> pd.DataFrame:
            "human_elo": K * a, "human_se": K * se,
            "human_lo": K * (a - 1.96 * se), "human_hi": K * (a + 1.96 * se),
            "se_ratio_pair_cluster": se / se_game}
-    out["rank_raw"] = pd.Series(out["human_elo"]).rank(ascending=False, method="min").astype(int).to_numpy()
-    return pd.DataFrame(out)
+    out = pd.DataFrame(out)
+    # Too few games, or all wins / all losses: no finite estimate (sparse sets).
+    bad = (n < 2) | (out.escore_observed <= 0) | (out.escore_observed >= 1) | ~(out.human_se > 0)
+    out.loc[bad, ["human_elo", "human_se", "human_lo", "human_hi"]] = np.nan
+    out["rank_raw"] = out.human_elo.rank(ascending=False, method="min").astype("Int64")
+    return out
 
 
 def reml(y: np.ndarray, v: np.ndarray, X: np.ndarray) -> dict:
@@ -353,28 +365,32 @@ def engine_reliability(x: np.ndarray, sd: np.ndarray) -> float:
 def stage2(pos: pd.DataFrame, eng: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Null model (tau, shrunken estimates, ranks) and one meta-regression
     per engine predictor; deciles of engine Delta_Elo for the figure."""
-    y = pos.human_elo.to_numpy()
-    v = pos.human_se.to_numpy() ** 2
+    pos = pos.copy()
+    ok = (np.isfinite(pos.human_elo) & np.isfinite(pos.human_se)).to_numpy()
+    y = pos.human_elo.to_numpy()[ok]
+    v = pos.human_se.to_numpy()[ok] ** 2
     one = np.ones((len(y), 1))
     null = reml(y, v, one)
     mu, t2 = null["b"][0], null["tau2"]
     shrink = t2 / (t2 + v)
-    pos = pos.copy()
-    pos["shrunk_elo"] = mu + shrink * (y - mu)
     sd = np.sqrt(t2 * v / (t2 + v) + (1 - shrink) ** 2 * null["cov"][0, 0])
-    pos["shrunk_lo"] = pos.shrunk_elo - 1.96 * sd
-    pos["shrunk_hi"] = pos.shrunk_elo + 1.96 * sd
-    pos["rank_shrunk"] = pos.shrunk_elo.rank(ascending=False, method="min").astype(int)
+    for c in ("shrunk_elo", "shrunk_lo", "shrunk_hi"):
+        pos[c] = np.nan
+    pos.loc[ok, "shrunk_elo"] = mu + shrink * (y - mu)
+    pos.loc[ok, "shrunk_lo"] = pos.loc[ok, "shrunk_elo"] - 1.96 * sd
+    pos.loc[ok, "shrunk_hi"] = pos.loc[ok, "shrunk_elo"] + 1.96 * sd
+    pos["rank_shrunk"] = pos.shrunk_elo.rank(ascending=False, method="min").astype("Int64")
     human_rel = t2 / (t2 + np.mean(v))
     rows = [{"model": "null", "predictor": "", "mu": mu, "mu_se": np.sqrt(null["cov"][0, 0]),
              "tau": null["tau"], "tau_lo": null["tau_lo"], "tau_hi": null["tau_hi"],
              "lrt_tau": null["lrt"], "p_tau": null["p_tau"], "human_reliability": human_rel,
-             "mean_se": float(np.sqrt(np.mean(v)))}]
+             "mean_se": float(np.sqrt(np.mean(v))), "positions_used": int(ok.sum())}]
     deciles = []
     for e in PREDICTORS:
-        x = eng[("delta_elo_median", e)].reindex(pos.position_id).to_numpy()
-        xsd = eng[("delta_elo_sd", e)].reindex(pos.position_id).to_numpy()
-        pos[f"{e}_selfplay_elo"] = x
+        x_all = eng[("delta_elo_median", e)].reindex(pos.position_id).to_numpy()
+        pos[f"{e}_selfplay_elo"] = x_all
+        x = x_all[ok]
+        xsd = eng[("delta_elo_sd", e)].reindex(pos.position_id).to_numpy()[ok]
         xc = x - x.mean()
         fit = reml(y, v, np.column_stack([one, xc]))
         se = np.sqrt(np.diag(fit["cov"]))
@@ -428,11 +444,24 @@ def game_level(d: pd.DataFrame, eng: pd.DataFrame, beta_free: bool = True) -> tu
     inter = pd.DataFrame({"term": names, "estimate": b * scale, "se": se * scale})
     inter["lo"] = inter.estimate - 1.96 * inter.se
     inter["hi"] = inter.estimate + 1.96 * inter.se
+    # Pooled slope without the rating interaction (the primary estimate for
+    # sparse sets such as titled players, where per-position fits are unstable).
+    Xp = np.column_stack([np.ones(len(d)), dx, xc])
+    bp, Vp = frac_logit(Xp, y, cluster=cl)
+    sp = np.sqrt(np.diag(Vp))
+    pooled = pd.DataFrame({"term": ["pooled_advantage_elo", "pooled_beta", "pooled_gamma"],
+                           "estimate": bp * [K, 1, 1], "se": sp * [K, 1, 1]})
+    inter = pd.concat([inter, pooled], ignore_index=True)
+    inter["lo"] = inter.estimate - 1.96 * inter.se
+    inter["hi"] = inter.estimate + 1.96 * inter.se
     inter["p"] = 2 * stats.norm.sf(np.abs(inter.estimate / inter.se))
     rows = []
     band = band_of(pd.Series((d.white_elo.to_numpy(float) + d.black_elo.to_numpy(float)) / 2))
     for lab in BAND_LABELS:
         m = (band == lab).to_numpy()
+        if m.sum() < MIN_BAND_GAMES:
+            rows.append({"band": lab, "games": int(m.sum())})
+            continue
         Xb = np.column_stack([np.ones(m.sum()), dx[m], xc[m]])
         bb, Vb = frac_logit(Xb, y[m], cluster=cl[m])
         sb = np.sqrt(np.diag(Vb))
@@ -448,6 +477,8 @@ def descriptives(d: pd.DataFrame) -> pd.DataFrame:
     band = band_of((d.white_elo.astype(float) + d.black_elo.astype(float)) / 2)
     rows = []
     for lab, m in [("all", np.ones(len(d), bool))] + [(b, (band == b).to_numpy()) for b in BAND_LABELS]:
+        if not m.any():
+            continue
         s = d.score_white.to_numpy(float)[m]
         e = s.mean()
         rows.append({"band": lab, "games": int(m.sum()), "white_wins": float((s == 1).mean()),
@@ -485,15 +516,15 @@ def fig_human_vs_selfplay(positions: dict, meta: dict, deciles: dict, out_dir: P
     meta-regression; dotted: equality; coloured: decile means with 95% CIs."""
     plt = apply_style()
     from matplotlib.ticker import MultipleLocator
-    fig, axes = plt.subplots(len(PREDICTORS), len(SETS), figsize=(7.0, 3.4 * len(PREDICTORS)),
+    fig, axes = plt.subplots(len(PREDICTORS), len(MAIN_SETS), figsize=(7.0, 3.4 * len(PREDICTORS)),
                              sharey=True, gridspec_kw={"wspace": 0.1, "hspace": 0.35})
-    ally = pd.concat([p.human_elo for p in positions.values()])
+    ally = pd.concat([positions[s].human_elo for s in MAIN_SETS]).dropna()
     ylo, yhi = np.percentile(ally, [0.5, 99.5])
     ylo, yhi = ylo - 5, yhi + 5
     for i, e in enumerate(PREDICTORS):
-        allx = pd.concat([p[f"{e}_selfplay_elo"] for p in positions.values()])
+        allx = pd.concat([positions[s][f"{e}_selfplay_elo"] for s in MAIN_SETS])
         xlo, xhi = allx.min() - 5, allx.max() + 5
-        for j, s in enumerate(SETS):
+        for j, s in enumerate(MAIN_SETS):
             ax = axes[i, j]
             p = positions[s]
             r = meta[s][(meta[s].model == "slope") & (meta[s].predictor == e)].iloc[0]
@@ -530,7 +561,7 @@ def fig_bands(bands: dict, out_dir: Path) -> list[Path]:
     plt = apply_style()
     fig, axes = plt.subplots(1, 2, figsize=(7.0, 2.9), gridspec_kw={"wspace": 0.3})
     xs = np.arange(len(BAND_LABELS))
-    for k, s in enumerate(SETS):
+    for k, s in enumerate(MAIN_SETS):
         b = bands[s]
         st = SET_STYLE[s]
         off = (k - 0.5) * 0.18
@@ -555,8 +586,8 @@ def fig_calibration(cal: dict, out_dir: Path) -> list[Path]:
     """Observed White score by rating-gap bin with the fitted curve (solid)
     and the 400-point Elo curve (dotted)."""
     plt = apply_style()
-    fig, axes = plt.subplots(1, len(SETS), figsize=(7.0, 3.0), sharey=True, gridspec_kw={"wspace": 0.1})
-    for ax, s in zip(axes, SETS):
+    fig, axes = plt.subplots(1, len(MAIN_SETS), figsize=(7.0, 3.0), sharey=True, gridspec_kw={"wspace": 0.1})
+    for ax, s in zip(axes, MAIN_SETS):
         c = cal[s]
         ax.plot(c.gap_mean, c.elo_curve, color=MUTED_TEXT, lw=0.9, ls=(0, (1, 2)))
         ax.plot(c.gap_mean, c.fitted, color="#111111", lw=1.1)
@@ -574,8 +605,8 @@ def fig_ranked(positions: dict, out_dir: Path) -> list[Path]:
     CIs (stage 1, unshrunk: with tau near zero the shrunken values are all
     equal); #518 black."""
     plt = apply_style()
-    fig, axes = plt.subplots(1, len(SETS), figsize=(7.0, 3.0), sharey=True, gridspec_kw={"wspace": 0.08})
-    for ax, s in zip(axes, SETS):
+    fig, axes = plt.subplots(1, len(MAIN_SETS), figsize=(7.0, 3.0), sharey=True, gridspec_kw={"wspace": 0.08})
+    for ax, s in zip(axes, MAIN_SETS):
         g = positions[s].sort_values("human_elo", ascending=False).reset_index(drop=True)
         rank = np.arange(1, len(g) + 1)
         ax.axhline(0, color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=0)
@@ -601,8 +632,21 @@ def summary_text(res: dict) -> str:
     for s in SETS:
         r = res[s]
         rm, desc = r["rating"], r["desc"]
-        null = r["meta"][r["meta"].model == "null"].iloc[0]
         a = desc[desc.band == "all"].iloc[0]
+        if s in TITLED_SETS:
+            t = r["inter"].set_index("term")
+            L += ["", f"{SET_LABELS[s]} ({len(r['data']):,} games, {a.players:,} players)", "-" * 40,
+                  f"W/D/L {100 * a.white_wins:.1f} / {100 * a.draws:.1f} / {100 * a.black_wins:.1f}%; "
+                  f"E_score {a.escore:.4f}; raw Delta_Elo {a.delta_elo_raw:+.1f}",
+                  f"Rating model: White advantage at equal ratings {rm['advantage_elo']:+.1f} "
+                  f"[{rm['advantage_lo']:+.1f}, {rm['advantage_hi']:+.1f}] Elo; beta {rm['beta']:.3f}",
+                  f"Games per position: median {r['positions'].games.median():.0f}; per-position "
+                  "models not fitted (too sparse)",
+                  "Pooled game-level slope on Stockfish self-play (position-clustered): "
+                  f"{t.loc['pooled_gamma', 'estimate']:.3f} [{t.loc['pooled_gamma', 'lo']:.3f}, "
+                  f"{t.loc['pooled_gamma', 'hi']:.3f}] (p {t.loc['pooled_gamma', 'p']:.3g})"]
+            continue
+        null = r["meta"][r["meta"].model == "null"].iloc[0]
         L += ["", f"{SET_LABELS[s]} ({len(r['data']):,} games, {a.players:,} players)",
               "-" * 40,
               f"W/D/L {100 * a.white_wins:.1f} / {100 * a.draws:.1f} / {100 * a.black_wins:.1f}%; "
@@ -620,7 +664,7 @@ def summary_text(res: dict) -> str:
                      f"{m.tau:.1f}; tau^2 explained {m.tau2_explained:.2f}; rho {m.spearman_rho:.3f}")
         p518 = r["positions"].set_index("position_id").loc[STANDARD_POSITION_ID]
         L.append(f"#518: {p518.games:,.0f} games, {p518.human_elo:+.1f} [{p518.human_lo:+.1f}, "
-                 f"{p518.human_hi:+.1f}]; raw rank {p518.rank_raw:.0f}; shrunk {p518.shrunk_elo:+.1f}")
+                 f"{p518.human_hi:+.1f}]; raw rank {p518.rank_raw}; shrunk {p518.shrunk_elo:+.1f}")
         sep = r["positions"]
         L.append(f"Per-position 95% CIs entirely above 0: {(sep.human_lo > 0).sum()}; below 0: "
                  f"{(sep.human_hi < 0).sum()}; excluding the pooled mean {null.mu:+.1f}: "
@@ -648,7 +692,12 @@ def analyse(prepared: Path = PREPARED, tables: Path = OUT_TABLES, figures: Path 
         log.info("%s: %d games", s, len(d))
         rm = rating_model(d)
         pos = stage1(d, rm["_b"][1])
-        pos, meta, dec = stage2(pos, eng)
+        if s in TITLED_SETS:          # about 9 games per position: game-level model only
+            for e in PREDICTORS:
+                pos[f"{e}_selfplay_elo"] = eng[("delta_elo_median", e)].reindex(pos.position_id).to_numpy()
+            meta, dec = pd.DataFrame(), pd.DataFrame()
+        else:
+            pos, meta, dec = stage2(pos, eng)
         inter, bands = game_level(d, eng)
         res[s] = {"data": d, "rating": rm, "desc": descriptives(d), "cal": calibration(d, rm["_b"]),
                   "positions": pos, "meta": meta, "deciles": dec, "inter": inter, "bands": bands}

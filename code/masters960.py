@@ -1,0 +1,476 @@
+"""Master-level over-the-board Chess960 games (human play case studies).
+
+Games from elite Chess960 / Freestyle events, as PGN files from The Week in
+Chess (TWIC). The files are listed in config/masters960_sources.csv (add rows
+for events found later; `verified` marks URLs checked by hand). These events
+usually draw one position per round for every board, so the data are many
+games on a few dozen positions: case studies rather than a full ranking.
+
+Subcommands
+-----------
+download  Fetch every listed file into data/masters/ (needs internet; skips
+          files already there). Files can also be saved there by hand.
+parse     Read every .pgn in data/masters/ and write
+          results/masters960/masters960_games.csv: one row per game with the
+          event (from the sources table), players, FIDE ratings, result,
+          starting position (0-959 from the FEN), plies, clocks and the
+          time-control class. Armageddon games (unequal clocks or named in the
+          round/event) are flagged.
+analyse   Inclusion: position identified, not Armageddon, at least 10 plies
+          (drops forfeits), both ratings. Then:
+            - events and positions tables (games, W/D/L, rating-adjusted
+              human Delta_Elo with 95% CI next to the self-play values);
+            - pooled fractional logits with the rating gap as an offset
+              (FIDE Elo, so beta = 1): White's advantage at equal ratings and
+              the slope on Stockfish / Caissa self-play Delta_Elo, overall,
+              by time-control class and by rating level, position-clustered;
+            - a comparison of White's advantage and the draw rate across
+              playing levels: Lichess bands, Lichess titled, masters, engines;
+            - figures: case-study positions and the levels comparison.
+
+    python code/masters960.py download
+    python code/masters960.py parse
+    python code/masters960.py analyse
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import re
+import sys
+import urllib.request
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from scipy import special, stats
+
+from analyse_lichess960 import K, frac_logit, load_engines
+from lichess960 import iter_games, position_from_fen
+from plot_style import BAND_COLOUR, ENGINES, METRICS, MUTED_TEXT, apply_style, bold_tick_labels
+from utils import REPO_ROOT, STANDARD_POSITION_ID, setup_logging
+
+log = logging.getLogger("masters960")
+
+SOURCES = REPO_ROOT / "config" / "masters960_sources.csv"
+DATA = REPO_ROOT / "data" / "masters"
+OUT = REPO_ROOT / "results" / "masters960"
+FIGURES = REPO_ROOT / "results" / "figures"
+LICHESS = REPO_ROOT / "results" / "lichess960" / "analysis"
+SELFPLAY = REPO_ROOT / "results" / "selfplay" / "analysis" / "selfplay_posteriors.csv"
+
+CLK_RE = re.compile(r"\[%clk (\d+):(\d+):(\d+(?:\.\d+)?)\]")
+COMMENT_RE = re.compile(r"\{[^}]*\}")
+VARIATION_RE = re.compile(r"\([^()]*\)")
+MOVE_NO_RE = re.compile(r"\d+\.(\.\.)?")
+RESULTS = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}
+MIN_PLIES = 10
+ARMAGEDDON_RATIO = 0.25          # first clocks differing by more than this = unequal time
+MIN_CASE_GAMES = 20              # positions shown as case studies
+RATING_LEVELS = [0, 2400, 2600, 4000]
+RATING_LABELS = ["<2400", "2400-2599", "2600+"]
+TC_ORDER = ["classical", "rapid", "blitz"]
+
+
+# ---------------------------------------------------------------------------
+# Download and parse
+# ---------------------------------------------------------------------------
+
+def load_sources(path: Path = SOURCES) -> pd.DataFrame:
+    return pd.read_csv(path)
+
+
+def download(sources: pd.DataFrame, out_dir: Path = DATA) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for r in sources.itertuples():
+        dest = out_dir / r.file
+        if dest.exists() and dest.stat().st_size > 0:
+            log.info("%s: already here", r.file)
+            continue
+        try:
+            req = urllib.request.Request(r.url, headers={"User-Agent": "chess960-fairness research"})
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                dest.write_bytes(resp.read())
+            log.info("%s: downloaded (%d bytes)", r.file, dest.stat().st_size)
+        except Exception as exc:          # noqa: BLE001 - report and carry on
+            log.warning("%s: failed (%s); save it by hand from %s", r.file, exc, r.url)
+
+
+def tc_class(base_s: float) -> str:
+    if base_s >= 3600:
+        return "classical"
+    if base_s >= 480:
+        return "rapid"
+    return "blitz"
+
+
+def clocks(movetext: str) -> list[float]:
+    return [int(h) * 3600 + int(m) * 60 + float(s) for h, m, s in CLK_RE.findall(movetext)]
+
+
+def count_plies(movetext: str) -> int:
+    t = COMMENT_RE.sub(" ", movetext)
+    while VARIATION_RE.search(t):
+        t = VARIATION_RE.sub(" ", t)
+    t = MOVE_NO_RE.sub(" ", t)
+    toks = [x for x in t.split() if x not in RESULTS and x != "*" and not x.startswith("$")]
+    return len(toks)
+
+
+def game_record(h: dict[str, str], movetext: str, src: dict) -> dict:
+    fen = h.get("FEN", "")
+    clk = clocks(movetext)
+    w0 = clk[0] if len(clk) > 0 else np.nan
+    b0 = clk[1] if len(clk) > 1 else np.nan
+    source_base = float(src.get("base_minutes", np.nan)) * 60
+    first = np.nanmax([w0, b0]) if np.isfinite([w0, b0]).any() else np.nan
+    # A game in a file whose first clocks are far below the event's base time
+    # is a tiebreak at a faster control: classify it by its own clocks.
+    base = first if np.isfinite(first) and first < 0.5 * source_base else source_base
+    text = f"{h.get('Event', '')} {h.get('Round', '')}".lower()
+    unequal = (np.isfinite(w0) and np.isfinite(b0) and max(w0, b0) > 0
+               and abs(w0 - b0) / max(w0, b0) > ARMAGEDDON_RATIO)
+    def elo(k):
+        try:
+            v = float(h.get(k, ""))
+            return v if v > 0 else np.nan
+        except ValueError:
+            return np.nan
+    return {
+        "source": src.get("file", ""), "event": src.get("event", h.get("Event", "")),
+        "year": src.get("year", np.nan), "stage": src.get("stage", ""),
+        "pgn_event": h.get("Event", ""), "site": h.get("Site", ""), "date": h.get("Date", ""),
+        "round": h.get("Round", ""), "white": h.get("White", ""), "black": h.get("Black", ""),
+        "white_elo": elo("WhiteElo"), "black_elo": elo("BlackElo"),
+        "white_title": h.get("WhiteTitle", ""), "black_title": h.get("BlackTitle", ""),
+        "result": h.get("Result", ""), "score_white": RESULTS.get(h.get("Result", ""), np.nan),
+        "fen": fen, "position_id": position_from_fen(fen) if fen else -1,
+        "plies": count_plies(movetext), "first_clock_white": w0, "first_clock_black": b0,
+        "base_s": base, "tc_class": tc_class(base) if np.isfinite(base) else "",
+        "armageddon": bool("armageddon" in text or unequal),
+    }
+
+
+def parse(sources: pd.DataFrame, data_dir: Path = DATA, out: Path = OUT) -> pd.DataFrame:
+    meta = {r["file"]: r for r in sources.to_dict("records")}
+    rows = []
+    for f in sorted(data_dir.glob("*.pgn")):
+        src = meta.get(f.name, {"file": f.name})
+        with open(f, encoding="utf-8", errors="replace") as fh:
+            n = 0
+            for h, mt in iter_games(fh):
+                rows.append(game_record(h, mt, src))
+                n += 1
+        log.info("%s: %d games", f.name, n)
+    g = pd.DataFrame(rows)
+    if g.empty:
+        raise SystemExit(f"no PGN files in {data_dir}")
+    before = len(g)
+    g = g.drop_duplicates(subset=["white", "black", "date", "round", "result", "fen", "plies"])
+    log.info("removed %d duplicate games", before - len(g))
+    out.mkdir(parents=True, exist_ok=True)
+    g.to_csv(out / "masters960_games.csv", index=False)
+    return g
+
+
+# ---------------------------------------------------------------------------
+# Analysis
+# ---------------------------------------------------------------------------
+
+def include(g: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    steps = [("starting position identified", g.position_id >= 0),
+             ("known result", g.score_white.notna()),
+             ("not Armageddon", ~g.armageddon.astype(bool)),
+             (f"at least {MIN_PLIES} plies (drops forfeits)", g.plies >= MIN_PLIES),
+             ("both FIDE ratings", g.white_elo.notna() & g.black_elo.notna())]
+    keep = pd.Series(True, index=g.index)
+    flow = [{"criterion": "parsed", "games": len(g)}]
+    for label, m in steps:
+        keep &= m.fillna(False).astype(bool)
+        flow.append({"criterion": label, "games": int(keep.sum())})
+    flow = pd.DataFrame(flow)
+    flow["removed"] = -flow.games.diff()
+    return g[keep].copy(), flow
+
+
+def rating_offset(d: pd.DataFrame) -> np.ndarray:
+    """FIDE Elo gap on the logit scale, beta fixed at 1."""
+    return (d.white_elo.to_numpy(float) - d.black_elo.to_numpy(float)) * np.log(10) / 400
+
+
+def wdl(s: np.ndarray) -> dict:
+    e = float(np.mean(s))
+    return {"games": len(s), "white_wins": float(np.mean(s == 1)), "draws": float(np.mean(s == 0.5)),
+            "black_wins": float(np.mean(s == 0)), "escore": e,
+            "delta_elo_raw": 400 * np.log10(e / (1 - e)) if 0 < e < 1 else np.nan}
+
+
+def advantage(d: pd.DataFrame, cluster: np.ndarray | None = None) -> dict:
+    """White's advantage at equal FIDE ratings (Elo), robust or clustered SE."""
+    s = d.score_white.to_numpy(float)
+    if len(d) < 2 or s.min() == s.max():
+        return {"advantage_elo": np.nan, "advantage_lo": np.nan, "advantage_hi": np.nan}
+    b, V = frac_logit(np.ones((len(d), 1)), s, offset=rating_offset(d), cluster=cluster)
+    se = float(np.sqrt(V[0, 0]))
+    return {"advantage_elo": K * b[0], "advantage_se": K * se,
+            "advantage_lo": K * (b[0] - 1.96 * se), "advantage_hi": K * (b[0] + 1.96 * se)}
+
+
+def slope(d: pd.DataFrame, x: pd.Series, engine: str) -> dict:
+    """Pooled slope of master outcomes on engine self-play Delta_Elo, with the
+    rating gap as an offset, clustered by position."""
+    xp = x.reindex(d.position_id).to_numpy()
+    if len(np.unique(d.position_id)) < 3:
+        return {}
+    xc = (xp - np.mean(xp)) / K
+    X = np.column_stack([np.ones(len(d)), xc])
+    b, V = frac_logit(X, d.score_white.to_numpy(float), offset=rating_offset(d),
+                      cluster=d.position_id.to_numpy())
+    se = np.sqrt(np.diag(V))
+    return {f"gamma_{engine}": b[1], f"gamma_{engine}_se": se[1],
+            f"gamma_{engine}_lo": b[1] - 1.96 * se[1], f"gamma_{engine}_hi": b[1] + 1.96 * se[1],
+            f"p_gamma_{engine}": 2 * stats.norm.sf(abs(b[1] / se[1]))}
+
+
+def level(d: pd.DataFrame) -> pd.Series:
+    m = (d.white_elo + d.black_elo) / 2
+    return pd.cut(m, RATING_LEVELS, labels=RATING_LABELS, right=False)
+
+
+def pooled(d: pd.DataFrame, eng: pd.DataFrame) -> pd.DataFrame:
+    groups = [("all", "all", d)]
+    groups += [("time control", t, d[d.tc_class == t]) for t in TC_ORDER]
+    lv = level(d)
+    groups += [("rating", r, d[lv == r]) for r in RATING_LABELS]
+    rows = []
+    for kind, name, sub in groups:
+        if len(sub) == 0:
+            continue
+        row = {"group": kind, "level": name, "positions": sub.position_id.nunique(),
+               "events": sub.event.nunique(), "mean_rating": float(((sub.white_elo + sub.black_elo) / 2).mean()),
+               **wdl(sub.score_white.to_numpy(float)),
+               **advantage(sub, sub.position_id.to_numpy())}
+        for e in ("stockfish", "caissa"):
+            row.update(slope(sub, eng[("delta_elo_median", e)], e))
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def positions_table(d: pd.DataFrame, eng: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for p, sub in d.groupby("position_id"):
+        r = {"position_id": p, "events": "; ".join(sorted(sub.event.unique())),
+             "tc_classes": "; ".join(t for t in TC_ORDER if (sub.tc_class == t).any()),
+             "mean_rating": float(((sub.white_elo + sub.black_elo) / 2).mean()),
+             **wdl(sub.score_white.to_numpy(float)), **advantage(sub)}
+        for e in ("stockfish", "caissa"):
+            r[f"{e}_selfplay_elo"] = eng.loc[p, ("delta_elo_median", e)]
+            r[f"{e}_selfplay_sd"] = eng.loc[p, ("delta_elo_sd", e)]
+        rows.append(r)
+    return pd.DataFrame(rows).sort_values("games", ascending=False)
+
+
+def events_table(d: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for (ev, yr, st), sub in d.groupby(["event", "year", "stage"], dropna=False):
+        rows.append({"event": ev, "year": yr, "stage": st, "positions": sub.position_id.nunique(),
+                     "mean_rating": float(((sub.white_elo + sub.black_elo) / 2).mean()),
+                     "tc_classes": "; ".join(t for t in TC_ORDER if (sub.tc_class == t).any()),
+                     **wdl(sub.score_white.to_numpy(float))})
+    return pd.DataFrame(rows).sort_values(["year", "event", "stage"])
+
+
+def levels_comparison(pool: pd.DataFrame, lichess_dir: Path = LICHESS,
+                      selfplay: Path = SELFPLAY) -> pd.DataFrame:
+    """White's advantage (at equal ratings for humans) and the draw rate
+    from club level to engines."""
+    rows = []
+    desc_p, bands_p, rm_p = (lichess_dir / f"lichess960_{k}.csv"
+                             for k in ("descriptives", "rating_bands", "rating_model"))
+    if desc_p.exists() and bands_p.exists() and rm_p.exists():
+        desc, bands, rm = pd.read_csv(desc_p), pd.read_csv(bands_p), pd.read_csv(rm_p)
+        for s in ("blitz", "rapid"):
+            for _, b in bands[bands.set == s].iterrows():
+                dr = desc[(desc.set == s) & (desc.band == b.band)]
+                if pd.isna(b.get("advantage_elo")) or dr.empty:
+                    continue
+                rows.append({"source": f"Lichess {s}", "level": b.band, "games": b.games,
+                             "advantage_elo": b.advantage_elo, "advantage_lo": b.advantage_lo,
+                             "advantage_hi": b.advantage_hi, "draws": float(dr.draws.iloc[0])})
+        t = rm[rm.set == "titled"]
+        dt = desc[(desc.set == "titled") & (desc.band == "all")]
+        if len(t) and len(dt):
+            rows.append({"source": "Lichess titled", "level": "titled", "games": int(t.games.iloc[0]),
+                         "advantage_elo": t.advantage_elo.iloc[0], "advantage_lo": t.advantage_lo.iloc[0],
+                         "advantage_hi": t.advantage_hi.iloc[0], "draws": float(dt.draws.iloc[0])})
+    for _, r in pool[pool.group.isin(["time control", "rating"])].iterrows():
+        rows.append({"source": "Masters OTB " + ("" if r.group == "rating" else "(time control)").strip(),
+                     "level": r.level, "games": r.games, "advantage_elo": r.advantage_elo,
+                     "advantage_lo": r.advantage_lo, "advantage_hi": r.advantage_hi, "draws": r.draws})
+    if selfplay.exists():
+        sp = pd.read_csv(selfplay)
+        for e, g in sp.groupby("engine"):
+            n = g.games.sum()
+            e_score = (g.white_wins.sum() + 0.5 * g.draws.sum()) / n
+            # mean over positions of the posterior median, with its spread
+            rows.append({"source": "Engine self-play", "level": ENGINES[e].label, "games": int(n),
+                         "advantage_elo": 400 * np.log10(e_score / (1 - e_score)),
+                         "advantage_lo": np.nan, "advantage_hi": np.nan,
+                         "draws": g.draws.sum() / n})
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# Figures
+# ---------------------------------------------------------------------------
+
+TC_STYLE = {"classical": dict(marker="o", mfc="#111111", color="#111111"),
+            "rapid": dict(marker="s", mfc="white", color="#111111"),
+            "blitz": dict(marker="^", mfc="white", color="#777777")}
+
+
+def save_fig(fig, name: str, out_dir: Path) -> list[Path]:
+    import matplotlib.pyplot as plt
+    out_dir.mkdir(parents=True, exist_ok=True)
+    paths = [out_dir / f"{name}.pdf", out_dir / f"{name}.png"]
+    for p in paths:
+        fig.savefig(p, metadata={"CreationDate": None} if p.suffix == ".pdf" else None)
+    plt.close(fig)
+    return paths
+
+
+def fig_case_positions(d: pd.DataFrame, eng: pd.DataFrame, out_dir: Path) -> list[Path]:
+    """Positions with at least MIN_CASE_GAMES master games: rating-adjusted
+    master Delta_Elo (95% CI) against Stockfish self-play Delta_Elo; marker by
+    the time-control class with most games at that position."""
+    plt = apply_style()
+    pos = positions_table(d, eng)
+    pos = pos[pos.games >= MIN_CASE_GAMES]
+    fig, ax = plt.subplots(figsize=(3.6, 3.4))
+    if len(pos):
+        main_tc = d.groupby("position_id").tc_class.agg(lambda s: s.value_counts().index[0])
+        lo = min(pos.stockfish_selfplay_elo.min(), pos.advantage_lo.min(), 0) - 10
+        hi = max(pos.stockfish_selfplay_elo.max(), pos.advantage_hi.max()) + 10
+        ax.plot([lo, hi], [lo, hi], color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=1)
+        ax.axhline(0, color=BAND_COLOUR, lw=0.8, zorder=0)
+        for _, r in pos.iterrows():
+            st = TC_STYLE.get(main_tc[r.position_id], TC_STYLE["rapid"])
+            ax.errorbar(r.stockfish_selfplay_elo, r.advantage_elo,
+                        yerr=[[r.advantage_elo - r.advantage_lo], [r.advantage_hi - r.advantage_elo]],
+                        fmt=st["marker"], mfc=st["mfc"], color=st["color"], ms=4.5, elinewidth=0.8,
+                        capsize=0, zorder=3)
+        ax.set_xlim(lo, hi)
+    ax.set_xlabel(f"Stockfish Self-play {METRICS['delta_elo'].bold_symbol}")
+    ax.set_ylabel(f"Master {METRICS['delta_elo'].bold_symbol}")
+    bold_tick_labels(ax)
+    return save_fig(fig, "masters960_case_positions", out_dir)
+
+
+def level_label(source: str, lev: str) -> str:
+    if source == "Lichess titled":
+        return "Lichess\ntitled"
+    if source.startswith("Lichess"):
+        return f"Lichess\n{source.split()[-1]}\n{lev}"
+    if source.startswith("Masters"):
+        return f"Masters\nOTB\n{lev}"
+    return f"Self-play\n{lev}"
+
+
+def fig_levels(levels: pd.DataFrame, out_dir: Path) -> list[Path]:
+    """White's advantage (left) and draw rate (right) from Lichess club level
+    through titled players and over-the-board masters to engines."""
+    plt = apply_style()
+    order = levels[~levels.source.str.contains(r"\(time control\)")].reset_index(drop=True)
+    labels = [level_label(r.source, r.level) for r in order.itertuples()]
+    x = np.arange(len(order))
+    fig, axes = plt.subplots(2, 1, figsize=(7.0, 4.8), sharex=True, gridspec_kw={"hspace": 0.12})
+    colours = ["#111111" if s.startswith("Lichess") else ("#555555" if s.startswith("Masters") else
+               ENGINES[r.lower()].colour if r.lower() in ENGINES else "#999999")
+               for s, r in zip(order.source, order.level)]
+    ax = axes[0]
+    ax.axhline(0, color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)))
+    for i, r in order.iterrows():
+        yerr = None if pd.isna(r.advantage_lo) else [[r.advantage_elo - r.advantage_lo], [r.advantage_hi - r.advantage_elo]]
+        ax.errorbar(i, r.advantage_elo, yerr=yerr, fmt="o", ms=4.5, color=colours[i], elinewidth=1.0, capsize=0)
+    ax.set_ylabel(f"White Advantage {METRICS['delta_elo'].bold_symbol}")
+    axes[1].bar(x, 100 * order.draws, color=colours, width=0.6)
+    axes[1].set_ylabel("Draws (%)")
+    axes[1].set_xticks(x, labels, fontsize=6)
+    for a in axes:
+        bold_tick_labels(a)
+    return save_fig(fig, "masters960_levels", out_dir)
+
+
+# ---------------------------------------------------------------------------
+# Analyse
+# ---------------------------------------------------------------------------
+
+def summary_text(flow, ev, pos, pool, levels) -> str:
+    L = ["Master-level OTB Chess960: summary", "=" * 34, "", "Inclusion:"]
+    L += [f"  {r.criterion}: {r.games:,}" for r in flow.itertuples()]
+    L += ["", f"Events/stages: {len(ev)}; positions: {len(pos)}; games per position: median "
+          f"{pos.games.median():.0f}, max {pos.games.max()}; positions with >= {MIN_CASE_GAMES} games: "
+          f"{(pos.games >= MIN_CASE_GAMES).sum()}", "", "Pooled (rating gap as offset, position-clustered):"]
+    for r in pool.itertuples():
+        g = getattr(r, "gamma_stockfish", np.nan)
+        L.append(f"  {r.group} / {r.level}: n {r.games:,}, positions {r.positions}; W/D/L "
+                 f"{100 * r.white_wins:.1f}/{100 * r.draws:.1f}/{100 * r.black_wins:.1f}%; advantage "
+                 f"{r.advantage_elo:+.1f} [{r.advantage_lo:+.1f}, {r.advantage_hi:+.1f}]; slope on Stockfish "
+                 f"{g:.2f} [{getattr(r, 'gamma_stockfish_lo', np.nan):.2f}, "
+                 f"{getattr(r, 'gamma_stockfish_hi', np.nan):.2f}]")
+    L += ["", f"Case-study positions (>= {MIN_CASE_GAMES} games):"]
+    for r in pos[pos.games >= MIN_CASE_GAMES].itertuples():
+        L.append(f"  #{r.position_id}: n {r.games}, {r.tc_classes}; W/D/L {100 * r.white_wins:.0f}/"
+                 f"{100 * r.draws:.0f}/{100 * r.black_wins:.0f}%; master {r.advantage_elo:+.0f} "
+                 f"[{r.advantage_lo:+.0f}, {r.advantage_hi:+.0f}]; Stockfish {r.stockfish_selfplay_elo:+.0f}, "
+                 f"Caissa {r.caissa_selfplay_elo:+.0f}  ({r.events})")
+    if STANDARD_POSITION_ID in set(pos.position_id):
+        L.append(f"#518 present: {int(pos.set_index('position_id').loc[STANDARD_POSITION_ID, 'games'])} games")
+    return "\n".join(L) + "\n"
+
+
+def analyse(out: Path = OUT, figures: Path = FIGURES) -> None:
+    g = pd.read_csv(out / "masters960_games.csv")
+    d, flow = include(g)
+    eng = load_engines(SELFPLAY)
+    ev, pos, pool = events_table(d), positions_table(d, eng), pooled(d, eng)
+    levels = levels_comparison(pool)
+    flow.to_csv(out / "masters960_flow.csv", index=False)
+    ev.to_csv(out / "masters960_events.csv", index=False)
+    pos.to_csv(out / "masters960_positions.csv", index=False)
+    pool.to_csv(out / "masters960_pooled.csv", index=False)
+    levels.to_csv(out / "masters960_levels.csv", index=False)
+    text = summary_text(flow, ev, pos, pool, levels)
+    (out / "masters960_summary.txt").write_text(text)
+    print(text)
+    fig_case_positions(d, eng, figures)
+    fig_levels(levels, figures)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("-v", "--verbose", action="store_true")
+    sub = p.add_subparsers(dest="command", required=True)
+    for name, h in (("download", "fetch the listed PGN files into data/masters/"),
+                    ("parse", "PGN files to a games table"), ("analyse", "tables, models and figures")):
+        sub.add_parser(name, parents=[common], help=h)
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    setup_logging(args.verbose)
+    src = load_sources()
+    if args.command == "download":
+        download(src)
+    elif args.command == "parse":
+        parse(src)
+    else:
+        analyse()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

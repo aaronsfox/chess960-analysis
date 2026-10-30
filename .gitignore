@@ -20,6 +20,7 @@ results/*
 !results/lichess960/
 logs/
 data/lichess/
+data/masters/
 results/lichess960/prepared/
 *.tmp
 
