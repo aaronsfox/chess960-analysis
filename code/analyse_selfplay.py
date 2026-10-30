@@ -936,10 +936,9 @@ def fig_agreement_panel(post, agree, out_dir: Path) -> list[Path]:
     mean, diff = (A + B) / 2, B - A
     ax2.scatter(mean, diff, s=7, color="#222222", alpha=0.35, lw=0, zorder=2)
     ax2.axhline(0, color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=1)
-    ba_colour = ENGINES["plentychess"].colour        # magenta from the shared palette
-    ax2.axhline(r.mean_difference, color=ba_colour, lw=1.3, zorder=3)
+    ax2.axhline(r.mean_difference, color="#111111", lw=1.1, zorder=3)
     for v in (r.loa_low, r.loa_high):
-        ax2.axhline(v, color=ba_colour, lw=1.0, ls=(0, (4, 2)), zorder=3)
+        ax2.axhline(v, color="#111111", lw=0.9, ls=(0, (4, 2)), zorder=3)
     grid = np.linspace(mean.min(), mean.max(), 50)
     fit = stats.linregress(mean, diff)
     ax2.plot(grid, fit.intercept + fit.slope * grid, color="#111111", lw=0.9, ls=(0, (1, 1.5)),
