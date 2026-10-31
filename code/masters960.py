@@ -67,6 +67,10 @@ MOVE_NO_RE = re.compile(r"\d+\.(\.\.)?")
 RESULTS = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}
 MIN_PLIES = 10
 ARMAGEDDON_RATIO = 0.25          # first clocks differing by more than this = unequal time
+ARMAGEDDON_RATIO_BLITZ = 0.15    # ... in blitz-length games (Armageddon is e.g. 5 vs 4 min)
+OWN_CLOCK_BELOW = 0.6            # first clock below this share of the event base: faster tiebreak
+ROUND_POSITION_SHARE = 0.8       # a round where most games share one position drew that position
+ROUND_MIN_GAMES = 10
 MIN_CASE_GAMES = 20              # positions shown as case studies
 RATING_LEVELS = [0, 2400, 2600, 4000]
 RATING_LABELS = ["<2400", "2400-2599", "2600+"]
@@ -212,11 +216,13 @@ def game_record(h: dict[str, str], movetext: str, src: dict) -> dict:
     # is a tiebreak at a faster control: classify it by its own clocks.
     # A game whose first clocks are far from the event's base time (a faster
     # tiebreak, or a classical game in a mixed file) is classed by its own clocks.
-    base = (first if np.isfinite(first) and (first < 0.5 * source_base or first > 1.5 * source_base)
+    base = (first if np.isfinite(first) and (first < OWN_CLOCK_BELOW * source_base
+                                             or first > 1.5 * source_base)
             else source_base)
     text = f"{h.get('Event', '')} {h.get('Round', '')}".lower()
+    limit = ARMAGEDDON_RATIO_BLITZ if np.isfinite(base) and base < 480 else ARMAGEDDON_RATIO
     unequal = (np.isfinite(w0) and np.isfinite(b0) and max(w0, b0) > 0
-               and abs(w0 - b0) / max(w0, b0) > ARMAGEDDON_RATIO)
+               and abs(w0 - b0) / max(w0, b0) > limit)
     def elo(k):
         try:
             v = float(h.get(k, ""))
@@ -312,6 +318,24 @@ def fill_ratings(g: pd.DataFrame) -> pd.DataFrame:
     return g
 
 
+def round_position_ok(g: pd.DataFrame) -> pd.Series:
+    """In events that draw one position per round, a game whose position
+    differs from the one most of its round played is a broadcast error (a
+    board still showing an earlier round's game). Applied to rounds with at
+    least ROUND_MIN_GAMES games where one position covers at least
+    ROUND_POSITION_SHARE of the identified games."""
+    rnd = g["round"].astype(str).str.split(".").str[0]
+    key = g.source.astype(str) + "|" + rnd
+    ok = pd.Series(True, index=g.index)
+    for _, sub in g[g.position_id >= 0].groupby(key[g.position_id >= 0]):
+        if len(sub) < ROUND_MIN_GAMES:
+            continue
+        top = sub.position_id.value_counts()
+        if top.iloc[0] / len(sub) >= ROUND_POSITION_SHARE:
+            ok.loc[sub.index[sub.position_id != top.index[0]]] = False
+    return ok
+
+
 def include(g: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     n_missing = int((g.white_elo.isna() | g.black_elo.isna()).sum())
     g = fill_ratings(g)
@@ -327,6 +351,7 @@ def include(g: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         (g.position_id >= 0) & (g.position_id != STANDARD_POSITION_ID))
     steps = [("Chess960 game (Variant tag or Chess960 FEN)", chess960),
              ("starting position identified", g.position_id >= 0),
+             ("position matches its round's drawn position", round_position_ok(g)),
              ("known result", g.score_white.notna()),
              ("not Armageddon", ~g.armageddon.astype(bool)),
              (f"at least {MIN_PLIES} plies (drops forfeits)", g.plies >= MIN_PLIES),

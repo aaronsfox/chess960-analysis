@@ -1,7 +1,9 @@
 criterion,games,removed
-parsed,1212,
-starting position identified,1210,2.0
-known result,1210,-0.0
-not Armageddon,1210,-0.0
-at least 10 plies (drops forfeits),1209,1.0
-both FIDE ratings,1206,3.0
+parsed,2240,
+Chess960 game (Variant tag or Chess960 FEN),2235,5.0
+starting position identified,2234,1.0
+position matches its round's drawn position,2215,19.0
+known result,2213,2.0
+not Armageddon,2212,1.0
+at least 10 plies (drops forfeits),2210,2.0
+both FIDE ratings,2208,2.0

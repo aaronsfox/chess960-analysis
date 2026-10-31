@@ -2,31 +2,47 @@ Master-level OTB Chess960: summary
 ==================================
 
 Inclusion:
-  parsed: 1,212
-  starting position identified: 1,210
-  known result: 1,210
-  not Armageddon: 1,210
-  at least 10 plies (drops forfeits): 1,209
-  both FIDE ratings: 1,206
+  parsed: 2,240
+  Chess960 game (Variant tag or Chess960 FEN): 2,235
+  starting position identified: 2,234
+  position matches its round's drawn position: 2,215
+  known result: 2,213
+  not Armageddon: 2,212
+  at least 10 plies (drops forfeits): 2,210
+  both FIDE ratings: 2,208
 
-Events/stages: 18; positions: 129; games per position: median 5, max 69; positions with >= 20 games: 9
+Events/stages: 28; positions: 202; games per position: median 5, max 74; positions with >= 20 games: 23
 
 Pooled (rating gap as offset, position-clustered):
-  all / all: n 1,206, positions 129; W/D/L 38.8/28.1/33.1%; advantage +21.8 [+4.6, +39.0]; slope on Stockfish -0.50 [-1.53, 0.52]
-  time control / classical: n 715, positions 45; W/D/L 39.3/26.2/34.5%; advantage +17.9 [-4.1, +39.8]; slope on Stockfish 0.66 [-1.25, 2.57]
-  time control / rapid: n 435, positions 87; W/D/L 38.4/30.8/30.8%; advantage +27.6 [+1.5, +53.8]; slope on Stockfish -0.44 [-2.04, 1.16]
-  time control / blitz: n 56, positions 5; W/D/L 35.7/32.1/32.1%; advantage +12.5 [-120.6, +145.6]; slope on Stockfish -2.03 [-4.75, 0.70]
-  rating / <2400: n 272, positions 9; W/D/L 43.8/16.2/40.1%; advantage +23.2 [-16.9, +63.3]; slope on Stockfish -2.28 [-5.19, 0.63]
-  rating / 2400-2599: n 217, positions 11; W/D/L 41.0/21.7/37.3%; advantage -12.7 [-81.3, +55.9]; slope on Stockfish 1.95 [-1.56, 5.47]
-  rating / 2600+: n 717, positions 128; W/D/L 36.3/34.6/29.1%; advantage +27.4 [+6.6, +48.2]; slope on Stockfish -0.62 [-1.67, 0.43]
+  all / all: n 2,208, positions 202; W/D/L 37.5/29.0/33.5%; advantage +14.6 [+1.8, +27.4]; slope on Stockfish -0.28 [-0.96, 0.39]
+  time control / classical: n 1,315, positions 54; W/D/L 38.9/25.9/35.2%; advantage +12.0 [-5.4, +29.5]; slope on Stockfish -0.11 [-1.06, 0.85]
+  time control / rapid: n 761, positions 149; W/D/L 35.9/33.5/30.6%; advantage +20.2 [-1.8, +42.2]; slope on Stockfish 0.05 [-1.50, 1.61]
+  time control / blitz: n 132, positions 16; W/D/L 33.3/33.3/33.3%; advantage +0.0 [-59.6, +59.6]; slope on Stockfish -1.11 [-2.31, 0.09]
+  rating / <2400: n 551, positions 18; W/D/L 42.3/17.8/39.9%; advantage +8.1 [-23.1, +39.4]; slope on Stockfish -1.70 [-3.08, -0.32]
+  rating / 2400-2599: n 463, positions 30; W/D/L 39.1/24.4/36.5%; advantage -2.4 [-37.6, +32.7]; slope on Stockfish 0.93 [-1.10, 2.96]
+  rating / 2600+: n 1,194, positions 201; W/D/L 34.7/35.9/29.4%; advantage +20.6 [+4.4, +36.7]; slope on Stockfish -0.09 [-1.00, 0.82]
 
 Case-study positions (>= 20 games):
-  #9: n 69, classical; W/D/L 39/22/39%; master -23 [-127, +82]; Stockfish +11, Caissa +32  (grenke Freestyle Open Karlsruhe)
-  #758: n 69, classical; W/D/L 49/0/51%; master -42 [-133, +50]; Stockfish +18, Caissa +30  (grenke Freestyle Open Karlsruhe)
+  #549: n 74, classical; rapid; W/D/L 39/24/36%; master +2 [-69, +73]; Stockfish +51, Caissa +46  (Freestyle Grand Slam Las Vegas; grenke Freestyle Open Karlsruhe)
+  #906: n 73, classical; rapid; W/D/L 41/16/42%; master -41 [-168, +87]; Stockfish +7, Caissa +13  (Freestyle Grand Slam Weissenhaus; grenke Freestyle Open Karlsruhe)
   #130: n 69, classical; W/D/L 46/17/36%; master +43 [-38, +124]; Stockfish +19, Caissa +23  (grenke Freestyle Open Karlsruhe)
-  #380: n 68, classical; W/D/L 28/43/29%; master -15 [-95, +65]; Stockfish +9, Caissa +1  (grenke Freestyle Open Karlsruhe)
-  #228: n 68, classical; W/D/L 46/22/32%; master +38 [-52, +128]; Stockfish +15, Caissa +23  (grenke Freestyle Open Karlsruhe)
+  #230: n 69, classical; W/D/L 33/29/38%; master -16 [-89, +57]; Stockfish +37, Caissa +40  (grenke Freestyle Open Karlsruhe)
+  #9: n 69, classical; W/D/L 39/22/39%; master -23 [-127, +82]; Stockfish +11, Caissa +32  (grenke Freestyle Open Karlsruhe)
+  #53: n 69, classical; W/D/L 51/13/36%; master +66 [-16, +148]; Stockfish +7, Caissa +20  (grenke Freestyle Open Karlsruhe)
+  #758: n 69, classical; W/D/L 49/0/51%; master -42 [-133, +50]; Stockfish +18, Caissa +30  (grenke Freestyle Open Karlsruhe)
   #302: n 68, classical; W/D/L 34/21/46%; master -30 [-125, +66]; Stockfish +0, Caissa +21  (grenke Freestyle Open Karlsruhe)
+  #131: n 68, classical; W/D/L 31/41/28%; master +8 [-79, +95]; Stockfish +4, Caissa +3  (grenke Freestyle Open Karlsruhe)
+  #228: n 68, classical; W/D/L 46/22/32%; master +38 [-52, +128]; Stockfish +15, Caissa +23  (grenke Freestyle Open Karlsruhe)
+  #380: n 68, classical; W/D/L 28/43/29%; master -15 [-95, +65]; Stockfish +9, Caissa +1  (grenke Freestyle Open Karlsruhe)
+  #427: n 68, classical; W/D/L 46/16/38%; master +49 [-40, +137]; Stockfish +38, Caissa +20  (grenke Freestyle Open Karlsruhe)
   #630: n 67, classical; W/D/L 48/25/27%; master +48 [-38, +134]; Stockfish +24, Caissa +55  (grenke Freestyle Open Karlsruhe)
+  #534: n 67, classical; W/D/L 39/24/37%; master +29 [-45, +103]; Stockfish +35, Caissa +46  (grenke Freestyle Open Karlsruhe)
   #76: n 67, classical; W/D/L 37/31/31%; master +58 [-19, +135]; Stockfish +8, Caissa +19  (grenke Freestyle Open Karlsruhe)
-  #140: n 66, classical; W/D/L 30/35/35%; master -13 [-89, +62]; Stockfish +35, Caissa +38  (grenke Freestyle Open Karlsruhe)
+  #140: n 67, classical; W/D/L 30/34/36%; master -13 [-86, +60]; Stockfish +35, Caissa +38  (grenke Freestyle Open Karlsruhe)
+  #332: n 62, classical; W/D/L 44/24/32%; master +43 [-38, +123]; Stockfish +63, Caissa +57  (grenke Freestyle Open Karlsruhe)
+  #261: n 62, classical; W/D/L 26/45/29%; master -62 [-132, +7]; Stockfish +33, Caissa +39  (grenke Freestyle Open Karlsruhe)
+  #444: n 20, rapid; blitz; W/D/L 30/50/20%; master +35 [-80, +151]; Stockfish +4, Caissa +10  (Champions Showdown 9LX Saint Louis)
+  #309: n 20, rapid; blitz; W/D/L 25/50/25%; master +0 [-108, +108]; Stockfish +23, Caissa +40  (Champions Showdown 9LX Saint Louis)
+  #833: n 20, blitz; W/D/L 30/35/35%; master -18 [-140, +104]; Stockfish +14, Caissa +14  (Champions Showdown 9LX Saint Louis)
+  #802: n 20, rapid; blitz; W/D/L 40/30/30%; master +35 [-88, +159]; Stockfish +39, Caissa +32  (Champions Showdown 9LX Saint Louis)
+  #641: n 20, blitz; W/D/L 30/40/30%; master +0 [-116, +116]; Stockfish -8, Caissa +1  (Champions Showdown 9LX Saint Louis)

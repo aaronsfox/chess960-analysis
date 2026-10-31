@@ -84,7 +84,7 @@ def test_include_flow():
     d, flow = M.include(rows())
     assert len(d) == 1 and d.iloc[0]["round"] == "1.5"
     # game 4 is the standard start with no Variant tag: not counted as Chess960
-    assert flow.games.tolist() == [4, 3, 3, 3, 2, 1, 1]
+    assert flow.games.tolist() == [4, 3, 3, 3, 3, 2, 1, 1]
 
 
 def test_advantage_offset():
@@ -111,3 +111,10 @@ def test_event_filter_and_zip(tmp_path):
     src = pd.DataFrame([{**SRC, "file": "weekly.pgn", "event_filter": "Paris"}])
     g = M.parse(src, data, tmp_path / "out")
     assert len(g) == 4 and set(g.pgn_event.str.contains("Paris")) == {True}
+
+
+def test_round_position_ok():
+    g = pd.DataFrame({"source": "s", "round": [f"1.{i}" for i in range(12)] + ["2.1", "2.2"],
+                      "position_id": [5] * 11 + [7] + [9, 8]})
+    ok = M.round_position_ok(g)
+    assert ok.tolist() == [True] * 11 + [False] + [True, True]
