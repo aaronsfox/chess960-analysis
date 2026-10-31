@@ -73,10 +73,18 @@ def test_records():
     assert g.score_white.tolist() == [1.0, 0.5, 0.0, 1.0]
 
 
+def test_variant_tag():
+    assert M.is_960_variant("Chess960") and M.is_960_variant("chess 960")
+    assert M.is_960_variant("Fischerandom") and M.is_960_variant("Fischer Random")
+    assert not M.is_960_variant("") and not M.is_960_variant("Standard")
+    assert rows().variant_960.tolist() == [True, False, False, False]
+
+
 def test_include_flow():
     d, flow = M.include(rows())
     assert len(d) == 1 and d.iloc[0]["round"] == "1.5"
-    assert flow.games.tolist() == [4, 4, 4, 3, 1, 1]
+    # game 4 is the standard start with no Variant tag: not counted as Chess960
+    assert flow.games.tolist() == [4, 3, 3, 3, 2, 1, 1]
 
 
 def test_advantage_offset():

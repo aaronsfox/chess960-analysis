@@ -154,6 +154,15 @@ def count_plies(movetext: str) -> int:
     return len(toks)
 
 
+VARIANT_960_RE = re.compile(r"960|fischer\s*-?\s*random|fischerandom|freestyle|9lx", re.I)
+
+
+def is_960_variant(variant: str) -> bool:
+    """Variant header naming Chess960 (spellings seen: Chess960, chess 960,
+    Fischerandom, Fischer Random, Freestyle, 9LX)."""
+    return bool(VARIANT_960_RE.search(variant or ""))
+
+
 def game_record(h: dict[str, str], movetext: str, src: dict) -> dict:
     fen = h.get("FEN", "")
     clk = clocks(movetext)
@@ -184,6 +193,7 @@ def game_record(h: dict[str, str], movetext: str, src: dict) -> dict:
         "white_elo": elo("WhiteElo"), "black_elo": elo("BlackElo"),
         "white_title": h.get("WhiteTitle", ""), "black_title": h.get("BlackTitle", ""),
         "result": h.get("Result", ""), "score_white": RESULTS.get(h.get("Result", ""), np.nan),
+        "variant": h.get("Variant", ""), "variant_960": is_960_variant(h.get("Variant", "")),
         "fen": fen, "position_id": position_from_fen(fen) if fen else -1,
         "plies": count_plies(movetext), "first_clock_white": w0, "first_clock_black": b0,
         "base_s": base, "tc_class": tc_class(base) if np.isfinite(base) else "",
@@ -197,7 +207,7 @@ def parse(sources: pd.DataFrame, data_dir: Path = DATA, out: Path = OUT) -> pd.D
     if not files:
         raise SystemExit(f"no PGN files in {data_dir}; run `download` first")
     print(f"Parsing {len(files)} PGN files from {data_dir}\n")
-    print(f"{'file':<24} {'games':>6} {'960 pos':>7} {'positions':>9} {'classical':>9} "
+    print(f"{'file':<24} {'games':>6} {'variant':>7} {'960 pos':>7} {'positions':>9} {'classical':>9} "
           f"{'rapid':>6} {'blitz':>6} {'armag.':>6} {'no Elo':>6}  event")
     rows = []
     for f in files:
@@ -216,7 +226,7 @@ def parse(sources: pd.DataFrame, data_dir: Path = DATA, out: Path = OUT) -> pd.D
             print(f"{f.name:<24} {0:>6}  (no games found)")
             continue
         tc = r.tc_class.value_counts()
-        print(f"{f.name:<24} {len(r):>6} {(r.position_id >= 0).sum():>7} "
+        print(f"{f.name:<24} {len(r):>6} {int(r.variant_960.sum()):>7} {(r.position_id >= 0).sum():>7} "
               f"{r.position_id[r.position_id >= 0].nunique():>9} {tc.get('classical', 0):>9} "
               f"{tc.get('rapid', 0):>6} {tc.get('blitz', 0):>6} {int(r.armageddon.sum()):>6} "
               f"{int((r.white_elo.isna() | r.black_elo.isna()).sum()):>6}  "
@@ -225,6 +235,13 @@ def parse(sources: pd.DataFrame, data_dir: Path = DATA, out: Path = OUT) -> pd.D
     before = len(g)
     g = g.drop_duplicates(subset=["white", "black", "date", "round", "result", "fen", "plies"])
     unknown = g[g.position_id < 0]
+    no_tag = g[(g.position_id >= 0) & ~g.variant_960]
+    tag_no_pos = g[g.variant_960 & (g.position_id < 0)]
+    print(f"Variant tag says Chess960: {int(g.variant_960.sum()):,}; Chess960 FEN without the tag: "
+          f"{len(no_tag)}; tag without a usable FEN: {len(tag_no_pos)}")
+    if len(no_tag[no_tag.position_id == STANDARD_POSITION_ID]):
+        print(f"  standard start (#518) without a 960 tag: "
+              f"{int((no_tag.position_id == STANDARD_POSITION_ID).sum())} games (excluded as standard chess)")
     print(f"\nTotal: {before:,} games; {before - len(g)} duplicates removed; {len(g):,} kept")
     print(f"Starting position identified: {(g.position_id >= 0).sum():,}; distinct positions: "
           f"{g.position_id[g.position_id >= 0].nunique()}")
@@ -263,7 +280,15 @@ def include(g: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     print(f"Ratings: {n_missing} games missing one; "
           f"{n_missing - int((g.white_elo.isna() | g.black_elo.isna()).sum())} filled from the same "
           "player's other games in the event")
-    steps = [("starting position identified", g.position_id >= 0),
+    # A Chess960 game: the Variant header says so, or the FEN is a Chess960
+    # start other than the standard one (a standard-chess game has no FEN or
+    # the standard FEN and no 960 Variant tag).
+    if "variant_960" not in g:            # games table from before the Variant check
+        g["variant_960"] = False
+    chess960 = g.variant_960.fillna(False).astype(bool) | (
+        (g.position_id >= 0) & (g.position_id != STANDARD_POSITION_ID))
+    steps = [("Chess960 game (Variant tag or Chess960 FEN)", chess960),
+             ("starting position identified", g.position_id >= 0),
              ("known result", g.score_white.notna()),
              ("not Armageddon", ~g.armageddon.astype(bool)),
              (f"at least {MIN_PLIES} plies (drops forfeits)", g.plies >= MIN_PLIES),
