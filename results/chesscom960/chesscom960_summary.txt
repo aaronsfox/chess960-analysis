@@ -1,0 +1,14 @@
+Chess.com Freestyle Friday: what we've got
+==========================================
+
+Tournaments: 80 (2025-01-24 to 2026-10-30); games: 52,296; players: 2,600
+Chess960 position identified: 52,296; distinct positions: 568
+Games per position: min 0, median 40, max 439; positions with >= 20 games: 568
+Positions per tournament round: median 1 (1 = one drawn position per round); share of a round on its most common position: median 1.00
+Time controls: 180+1 41,265, 180+2 11,031
+Ratings (mean of the two players): p5: 1634, p25: 1920, p50: 2209, p75: 2405, p95: 2647
+Rating gap White - Black: p5: -640, p25: -253, p50: +13, p75: +255, p95: +647
+Results: White 48.2%, draw 7.1%, Black 44.7%; mean White score 0.5178
+Terminations: won by resignation 25,346, won on time 13,978, won by checkmate 9,250, drawn by repetition 2,123, drawn by insufficient material 1,046, drawn by stalemate 223, drawn by agreement 220, drawn by 50-move rule 92
+Games with fewer than 10 plies: 910
+Games per tournament: min 358, median 529, max 1745
