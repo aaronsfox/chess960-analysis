@@ -9,10 +9,14 @@ Delta_Elo and the decisive rate (1 - draw rate) with 95% credible intervals,
 P(favours White) and P(within +/-5 Elo).
 
 Sources: Stockfish and Caissa self-play; Lichess blitz and rapid (counts from
-analyse_lichess960.py). The titled-player and master sets are too sparse per
-position for this analysis (median 8 and 5 games). Lichess counts are raw:
-positions are assigned at random, so rating gaps average out over a
-position's games (the rating-adjusted estimates are in analyse_lichess960.py).
+analyse_lichess960.py). The main analysis uses rating-matched Lichess games
+(|rating gap| <= 100), so the raw counts are close to rating-neutral (the
+decisive rate in particular rises with the gap); every game is rerun as a
+check, with outputs suffixed _all_games. The titled-player and master sets
+are too sparse per position for this analysis (median 8 and 5 games). Model-
+based rating adjustment of White's advantage and of the decisive rate is in
+analyse_lichess960.py (rating gap in the model; decisive rate at equal
+ratings).
 
 Outputs (results/compare_levels/):
   compare_posteriors.csv  every source x position
@@ -77,8 +81,12 @@ def elo(e):
 # Data
 # ---------------------------------------------------------------------------
 
-def load_counts(selfplay: Path = SELFPLAY, lichess: Path = LICHESS) -> tuple[pd.DataFrame, dict]:
-    """One row per source x position: games, white_wins, draws, black_wins."""
+def load_counts(selfplay: Path = SELFPLAY, lichess: Path = LICHESS,
+                matched: bool = True) -> tuple[pd.DataFrame, dict]:
+    """One row per source x position: games, white_wins, draws, black_wins.
+    With matched=True (the main analysis) the Lichess counts are from
+    rating-matched games only (|rating gap| <= 100), so raw counts are close
+    to rating-neutral; matched=False uses every game."""
     cols = ["source", "position_id", "games", "white_wins", "draws", "black_wins"]
     parts = []
     sp = pd.read_csv(selfplay / "selfplay_posteriors.csv")
@@ -91,6 +99,10 @@ def load_counts(selfplay: Path = SELFPLAY, lichess: Path = LICHESS) -> tuple[pd.
         li = pd.read_csv(lichess)
         for s in ("blitz", "rapid"):
             g = li[li.set == s].assign(source=f"lichess_{s}")
+            if matched:
+                g = g.drop(columns=["games", "white_wins", "draws", "black_wins"]).rename(columns={
+                    "games_matched": "games", "white_wins_matched": "white_wins",
+                    "draws_matched": "draws", "black_wins_matched": "black_wins"})
             parts.append(g[cols])
     counts = pd.concat(parts, ignore_index=True)
     counts = counts[counts.games > 0]
@@ -308,21 +320,27 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args(argv)
     setup_logging(args.verbose)
-    counts, deff = load_counts()
-    print("Sources: " + ", ".join(f"{SOURCES[s][0]} ({(counts.source == s).sum()} positions, "
-                                  f"DEFF {deff[s]:.2f})" for s in SOURCES if s in deff))
-    post = posteriors(counts, deff)
-    src, agree = source_summary(post), agreement(post)
     OUT.mkdir(parents=True, exist_ok=True)
-    post.to_csv(OUT / "compare_posteriors.csv", index=False)
-    src.to_csv(OUT / "compare_sources.csv", index=False)
-    agree.to_csv(OUT / "compare_agreement.csv", index=False)
-    text = summary_text(src, agree, post)
-    (OUT / "compare_summary.txt").write_text(text)
-    print(text)
-    for path in fig_ternary(post, FIGURES):
-        if path.suffix == ".png":
-            print(f"Figure: {path}")
+    # Main: rating-matched Lichess games (|gap| <= 100). Check: every game.
+    for matched, suffix in ((True, ""), (False, "_all_games")):
+        counts, deff = load_counts(matched=matched)
+        label = "rating-matched Lichess games (|gap| <= 100)" if matched else "all Lichess games"
+        print(f"\n=== {label} ===")
+        print("Sources: " + ", ".join(f"{SOURCES[s][0]} ({(counts.source == s).sum()} positions, "
+                                      f"{int(counts[counts.source == s].games.sum()):,} games, "
+                                      f"DEFF {deff[s]:.2f})" for s in SOURCES if s in deff))
+        post = posteriors(counts, deff)
+        src, agree = source_summary(post), agreement(post)
+        post.to_csv(OUT / f"compare_posteriors{suffix}.csv", index=False)
+        src.to_csv(OUT / f"compare_sources{suffix}.csv", index=False)
+        agree.to_csv(OUT / f"compare_agreement{suffix}.csv", index=False)
+        text = f"Lichess counts: {label}\n\n" + summary_text(src, agree, post)
+        (OUT / f"compare_summary{suffix}.txt").write_text(text)
+        print(text)
+        if matched:
+            for path in fig_ternary(post, FIGURES):
+                if path.suffix == ".png":
+                    print(f"Figure: {path}")
     return 0
 
 

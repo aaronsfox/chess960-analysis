@@ -46,7 +46,7 @@ import numpy as np
 import pandas as pd
 from scipy import special, stats
 
-from analyse_lichess960 import K, frac_logit, load_engines
+from analyse_lichess960 import K, decisive_model, frac_logit, load_engines, per_position_decisive
 from lichess960 import iter_games, position_from_fen
 from plot_style import BAND_COLOUR, ENGINES, METRICS, MUTED_TEXT, apply_style, bold_tick_labels
 from utils import REPO_ROOT, STANDARD_POSITION_ID, setup_logging
@@ -422,20 +422,39 @@ def pooled(d: pd.DataFrame, eng: pd.DataFrame) -> pd.DataFrame:
         row = {"group": kind, "level": name, "positions": sub.position_id.nunique(),
                "events": sub.event.nunique(), "mean_rating": float(((sub.white_elo + sub.black_elo) / 2).mean()),
                **wdl(sub.score_white.to_numpy(float)),
-               **advantage(sub, sub.position_id.to_numpy())}
+               **advantage(sub, sub.position_id.to_numpy()), **decisive_at_equal(sub)}
         for e in ("stockfish", "caissa"):
             row.update(slope(sub, eng[("delta_elo_median", e)], e))
         rows.append(row)
     return pd.DataFrame(rows)
 
 
+def abs_gap(d: pd.DataFrame) -> np.ndarray:
+    return np.abs(d.white_elo.to_numpy(float) - d.black_elo.to_numpy(float))
+
+
+def decisive_at_equal(d: pd.DataFrame) -> dict:
+    """Decisive rate between equally rated players (logit on |rating gap| and
+    its square, position-clustered)."""
+    s = d.score_white.to_numpy(float)
+    dec = (s != 0.5).astype(float)
+    m = decisive_model(abs_gap(d), dec, cluster=d.position_id.to_numpy())
+    return {k: v for k, v in m.items() if not k.startswith("_")}
+
+
 def positions_table(d: pd.DataFrame, eng: pd.DataFrame) -> pd.DataFrame:
+    s = d.score_white.to_numpy(float)
+    dec = (s != 0.5).astype(float)
+    coef = decisive_model(abs_gap(d), dec, cluster=d.position_id.to_numpy())["_coef"]
+    adj = per_position_decisive(d.position_id.to_numpy(), abs_gap(d), dec, coef)
     rows = []
     for p, sub in d.groupby("position_id"):
         r = {"position_id": p, "events": "; ".join(sorted(sub.event.unique())),
              "tc_classes": "; ".join(t for t in TC_ORDER if (sub.tc_class == t).any()),
              "mean_rating": float(((sub.white_elo + sub.black_elo) / 2).mean()),
-             **wdl(sub.score_white.to_numpy(float)), **advantage(sub)}
+             **wdl(sub.score_white.to_numpy(float)), **advantage(sub),
+             "decisive_raw": float((sub.score_white != 0.5).mean()),
+             **adj.loc[int(p)].to_dict()}
         for e in ("stockfish", "caissa"):
             r[f"{e}_selfplay_elo"] = eng.loc[p, ("delta_elo_median", e)]
             r[f"{e}_selfplay_sd"] = eng.loc[p, ("delta_elo_sd", e)]
@@ -469,17 +488,17 @@ def levels_comparison(pool: pd.DataFrame, lichess_dir: Path = LICHESS,
                     continue
                 rows.append({"source": f"Lichess {s}", "level": b.band, "games": b.games,
                              "advantage_elo": b.advantage_elo, "advantage_lo": b.advantage_lo,
-                             "advantage_hi": b.advantage_hi, "draws": float(dr.draws.iloc[0])})
+                             "advantage_hi": b.advantage_hi, **dec_cols(dr.iloc[0])})
         t = rm[rm.set == "titled"]
         dt = desc[(desc.set == "titled") & (desc.band == "all")]
         if len(t) and len(dt):
             rows.append({"source": "Lichess titled", "level": "titled", "games": int(t.games.iloc[0]),
                          "advantage_elo": t.advantage_elo.iloc[0], "advantage_lo": t.advantage_lo.iloc[0],
-                         "advantage_hi": t.advantage_hi.iloc[0], "draws": float(dt.draws.iloc[0])})
+                         "advantage_hi": t.advantage_hi.iloc[0], **dec_cols(dt.iloc[0])})
     for _, r in pool[pool.group.isin(["time control", "rating"])].iterrows():
         rows.append({"source": "Masters OTB " + ("" if r.group == "rating" else "(time control)").strip(),
                      "level": r.level, "games": r.games, "advantage_elo": r.advantage_elo,
-                     "advantage_lo": r.advantage_lo, "advantage_hi": r.advantage_hi, "draws": r.draws})
+                     "advantage_lo": r.advantage_lo, "advantage_hi": r.advantage_hi, **dec_cols(r)})
     if selfplay.exists():
         sp = pd.read_csv(selfplay)
         for e, g in sp.groupby("engine"):
@@ -489,10 +508,18 @@ def levels_comparison(pool: pd.DataFrame, lichess_dir: Path = LICHESS,
             rows.append({"source": "Engine self-play", "level": ENGINES[e].label, "games": int(n),
                          "advantage_elo": 400 * np.log10(e_score / (1 - e_score)),
                          "advantage_lo": np.nan, "advantage_hi": np.nan,
-                         "draws": g.draws.sum() / n})
-    out = pd.DataFrame(rows)
-    out["decisive"] = 1 - out.draws
-    return out
+                         "decisive_raw": 1 - g.draws.sum() / n,
+                         # engines play themselves: no rating gap to adjust for
+                         "decisive": 1 - g.draws.sum() / n, "decisive_lo": np.nan, "decisive_hi": np.nan})
+    return pd.DataFrame(rows)
+
+
+def dec_cols(r) -> dict:
+    """Decisive rate at equal ratings (with CI) and the raw rate, from a row
+    with decisive_adj* (and decisive_raw or draws) columns."""
+    raw = r["decisive_raw"] if "decisive_raw" in r and pd.notna(r["decisive_raw"]) else 1 - r["draws"]
+    return {"decisive_raw": float(raw), "decisive": float(r["decisive_adj"]),
+            "decisive_lo": float(r["decisive_adj_lo"]), "decisive_hi": float(r["decisive_adj_hi"])}
 
 
 # ---------------------------------------------------------------------------
@@ -568,8 +595,11 @@ def fig_levels(levels: pd.DataFrame, out_dir: Path) -> list[Path]:
         yerr = None if pd.isna(r.advantage_lo) else [[r.advantage_elo - r.advantage_lo], [r.advantage_hi - r.advantage_elo]]
         ax.errorbar(i, r.advantage_elo, yerr=yerr, fmt="o", ms=4.5, color=colours[i], elinewidth=1.0, capsize=0)
     ax.set_ylabel(f"White Advantage {METRICS['delta_elo'].bold_symbol}")
-    axes[1].bar(x, 100 * (1 - order.draws), color=colours, width=0.6)
-    axes[1].set_ylabel("Decisive (%)")
+    axes[1].bar(x, 100 * order.decisive, color=colours, width=0.6)
+    err = np.array([100 * (order.decisive - order.decisive_lo), 100 * (order.decisive_hi - order.decisive)])
+    axes[1].errorbar(x, 100 * order.decisive, yerr=np.nan_to_num(err), fmt="none", ecolor="#999999",
+                     elinewidth=0.8, capsize=0)
+    axes[1].set_ylabel("Decisive at Equal Ratings (%)")
     axes[1].set_xticks(x, labels, fontsize=6)
     for a in axes:
         bold_tick_labels(a)
@@ -592,13 +622,15 @@ def summary_text(flow, ev, pos, pool, levels) -> str:
                  f"{100 * r.white_wins:.1f}/{100 * r.draws:.1f}/{100 * r.black_wins:.1f}%; advantage "
                  f"{r.advantage_elo:+.1f} [{r.advantage_lo:+.1f}, {r.advantage_hi:+.1f}]; slope on Stockfish "
                  f"{g:.2f} [{getattr(r, 'gamma_stockfish_lo', np.nan):.2f}, "
-                 f"{getattr(r, 'gamma_stockfish_hi', np.nan):.2f}]")
+                 f"{getattr(r, 'gamma_stockfish_hi', np.nan):.2f}]; decisive at equal ratings "
+                 f"{100 * r.decisive_adj:.1f}% [{100 * r.decisive_adj_lo:.1f}, {100 * r.decisive_adj_hi:.1f}]")
     L += ["", f"Case-study positions (>= {MIN_CASE_GAMES} games):"]
     for r in pos[pos.games >= MIN_CASE_GAMES].itertuples():
         L.append(f"  #{r.position_id}: n {r.games}, {r.tc_classes}; W/D/L {100 * r.white_wins:.0f}/"
                  f"{100 * r.draws:.0f}/{100 * r.black_wins:.0f}%; master {r.advantage_elo:+.0f} "
                  f"[{r.advantage_lo:+.0f}, {r.advantage_hi:+.0f}]; Stockfish {r.stockfish_selfplay_elo:+.0f}, "
-                 f"Caissa {r.caissa_selfplay_elo:+.0f}  ({r.events})")
+                 f"Caissa {r.caissa_selfplay_elo:+.0f}; decisive raw {100 * r.decisive_raw:.0f}%, at equal "
+                 f"ratings {100 * r.decisive_adj:.0f}%  ({r.events})")
     if STANDARD_POSITION_ID in set(pos.position_id):
         L.append(f"#518 present: {int(pos.set_index('position_id').loc[STANDARD_POSITION_ID, 'games'])} games")
     return "\n".join(L) + "\n"

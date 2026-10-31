@@ -267,6 +267,73 @@ def rating_model(d: pd.DataFrame) -> dict:
             "beta_hi": b[1] + 1.96 * se[1], "_b": b}
 
 
+MATCH_GAP = 100          # rating-matched games: |White - Black| <= this (Dirichlet analyses)
+
+
+def gap_X(abs_gap: np.ndarray) -> np.ndarray:
+    """Absolute rating gap terms for the decisive-rate model (per 100 points,
+    linear and quadratic)."""
+    g = np.asarray(abs_gap, float) / 100
+    return np.column_stack([g, g ** 2])
+
+
+def decisive_model(abs_gap: np.ndarray, decisive: np.ndarray, cluster: np.ndarray | None = None) -> dict:
+    """logit P(decisive) = a + b1 |gap| + b2 |gap|^2: the decisive rate between
+    equally rated players is expit(a). Returns the coefficients, the adjusted
+    rate with 95% CI and the gap coefficients (used as an offset elsewhere)."""
+    nan = {"decisive_adj": np.nan, "decisive_adj_lo": np.nan, "decisive_adj_hi": np.nan,
+           "decisive_gap_b1": np.nan, "decisive_gap_b2": np.nan, "_coef": np.array([0.0, 0.0])}
+    decisive = np.asarray(decisive, float)
+    if len(decisive) < 200 or decisive.min() == decisive.max():
+        return nan
+    X = np.column_stack([np.ones(len(decisive)), gap_X(abs_gap)])
+    try:
+        b, V = frac_logit(X, decisive, cluster=cluster)
+    except np.linalg.LinAlgError:
+        return nan
+    se = float(np.sqrt(V[0, 0]))
+    return {"decisive_adj": float(special.expit(b[0])),
+            "decisive_adj_lo": float(special.expit(b[0] - 1.96 * se)),
+            "decisive_adj_hi": float(special.expit(b[0] + 1.96 * se)),
+            "decisive_gap_b1": float(b[1]), "decisive_gap_b2": float(b[2]), "_coef": b[1:]}
+
+
+def per_position_decisive(pos: np.ndarray, abs_gap: np.ndarray, decisive: np.ndarray,
+                          coef: np.ndarray, cluster: np.ndarray | None = None,
+                          n_positions: int = N_POSITIONS) -> pd.DataFrame:
+    """Each position's decisive rate between equally rated players: one
+    intercept per position with the pooled gap terms as an offset (Newton,
+    vectorised); robust or cluster-robust SE on the logit scale."""
+    pos = np.asarray(pos, np.int64)
+    y = np.asarray(decisive, float)
+    off = gap_X(abs_gap) @ np.asarray(coef, float)
+    a = np.zeros(n_positions)
+    for _ in range(50):
+        p = special.expit(a[pos] + off)
+        g = np.bincount(pos, y - p, n_positions)
+        h = np.bincount(pos, p * (1 - p), n_positions)
+        step = np.divide(g, h, out=np.zeros_like(g), where=h > 0)
+        a += step
+        if np.max(np.abs(step)) < 1e-10:
+            break
+    p = special.expit(a[pos] + off)
+    r = y - p
+    h = np.bincount(pos, p * (1 - p), n_positions)
+    if cluster is None:
+        num = np.bincount(pos, r ** 2, n_positions)
+    else:
+        sums = pd.DataFrame({"pos": pos, "c": cluster, "r": r}).groupby(["pos", "c"], sort=False).r.sum()
+        num = (sums ** 2).groupby(level=0).sum().reindex(range(n_positions), fill_value=0).to_numpy()
+    se = np.sqrt(num) / np.where(h > 0, h, np.nan)
+    n = np.bincount(pos, minlength=n_positions)
+    k = np.bincount(pos, y, n_positions)
+    bad = (n < 2) | (k == 0) | (k == n) | ~(se > 0)
+    out = pd.DataFrame({"decisive_adj": special.expit(a), "decisive_adj_lo": special.expit(a - 1.96 * se),
+                        "decisive_adj_hi": special.expit(a + 1.96 * se)})
+    out.loc[bad, :] = np.nan
+    return out
+
+
 def calibration(d: pd.DataFrame, b: np.ndarray) -> pd.DataFrame:
     gap = d.white_elo.astype(float) - d.black_elo.astype(float)
     cut = pd.cut(gap, CALIBRATION_BINS)
@@ -317,6 +384,17 @@ def stage1(d: pd.DataFrame, beta: float) -> pd.DataFrame:
            "human_lo": K * (a - 1.96 * se), "human_hi": K * (a + 1.96 * se),
            "se_ratio_pair_cluster": se / se_game}
     out = pd.DataFrame(out)
+    # Rating-matched counts (|gap| <= MATCH_GAP), for the Dirichlet analyses.
+    gap = np.abs(d.white_elo.to_numpy(float) - d.black_elo.to_numpy(float))
+    m = gap <= MATCH_GAP
+    out["games_matched"] = np.bincount(pos[m], minlength=N_POSITIONS)
+    out["white_wins_matched"] = np.bincount(pos[m], y[m] == 1, N_POSITIONS).astype(int)
+    out["draws_matched"] = np.bincount(pos[m], y[m] == 0.5, N_POSITIONS).astype(int)
+    out["black_wins_matched"] = np.bincount(pos[m], y[m] == 0, N_POSITIONS).astype(int)
+    # Decisive rate between equally rated players, per position.
+    dec = (y != 0.5).astype(float)
+    dm = decisive_model(gap, dec, cluster=pos)
+    out = pd.concat([out, per_position_decisive(pos, gap, dec, dm["_coef"], cluster=pair)], axis=1)
     # Too few games, or all wins / all losses: no finite estimate (sparse sets).
     bad = (n < 2) | (out.escore_observed <= 0) | (out.escore_observed >= 1) | ~(out.human_se > 0)
     out.loc[bad, ["human_elo", "human_se", "human_lo", "human_hi"]] = np.nan
@@ -481,7 +559,12 @@ def descriptives(d: pd.DataFrame) -> pd.DataFrame:
             continue
         s = d.score_white.to_numpy(float)[m]
         e = s.mean()
+        gap = np.abs(d.white_elo.to_numpy(float) - d.black_elo.to_numpy(float))[m]
+        dm = decisive_model(gap, (s != 0.5).astype(float), cluster=d.position_id.to_numpy()[m])
         rows.append({"band": lab, "games": int(m.sum()), "white_wins": float((s == 1).mean()),
+                     "decisive_raw": float((s != 0.5).mean()),
+                     **{k: v for k, v in dm.items() if not k.startswith("_")},
+                     "games_matched": int((gap <= MATCH_GAP).sum()),
                      "draws": float((s == 0.5).mean()), "black_wins": float((s == 0).mean()),
                      "escore": e, "delta_elo_raw": 400 * np.log10(e / (1 - e)),
                      "mean_gap": float((d.white_elo.astype(float) - d.black_elo.astype(float))[m].mean()),
@@ -638,6 +721,9 @@ def summary_text(res: dict) -> str:
             L += ["", f"{SET_LABELS[s]} ({len(r['data']):,} games, {a.players:,} players)", "-" * 40,
                   f"W/D/L {100 * a.white_wins:.1f} / {100 * a.draws:.1f} / {100 * a.black_wins:.1f}%; "
                   f"E_score {a.escore:.4f}; raw Delta_Elo {a.delta_elo_raw:+.1f}",
+              f"Decisive rate: raw {100 * a.decisive_raw:.1f}%; at equal ratings {100 * a.decisive_adj:.1f}% "
+              f"[{100 * a.decisive_adj_lo:.1f}, {100 * a.decisive_adj_hi:.1f}]; rating-matched games "
+              f"(|gap| <= {MATCH_GAP}): {a.games_matched:,}",
                   f"Rating model: White advantage at equal ratings {rm['advantage_elo']:+.1f} "
                   f"[{rm['advantage_lo']:+.1f}, {rm['advantage_hi']:+.1f}] Elo; beta {rm['beta']:.3f}",
                   f"Games per position: median {r['positions'].games.median():.0f}; per-position "
@@ -651,6 +737,9 @@ def summary_text(res: dict) -> str:
               "-" * 40,
               f"W/D/L {100 * a.white_wins:.1f} / {100 * a.draws:.1f} / {100 * a.black_wins:.1f}%; "
               f"E_score {a.escore:.4f}; raw Delta_Elo {a.delta_elo_raw:+.1f}",
+              f"Decisive rate: raw {100 * a.decisive_raw:.1f}%; at equal ratings {100 * a.decisive_adj:.1f}% "
+              f"[{100 * a.decisive_adj_lo:.1f}, {100 * a.decisive_adj_hi:.1f}]; rating-matched games "
+              f"(|gap| <= {MATCH_GAP}): {a.games_matched:,}",
               f"Rating model: White advantage at equal ratings {rm['advantage_elo']:+.1f} "
               f"[{rm['advantage_lo']:+.1f}, {rm['advantage_hi']:+.1f}] Elo; rating-gap coefficient "
               f"beta {rm['beta']:.3f} [{rm['beta_lo']:.3f}, {rm['beta_hi']:.3f}] (1 = Elo scale)",
@@ -676,9 +765,12 @@ def summary_text(res: dict) -> str:
         for _, t in r["inter"].iterrows():
             L.append(f"  {t.term}: {t.estimate:+.3f} [{t.lo:+.3f}, {t.hi:+.3f}] (p {t.p:.3g})")
         L.append("By rating band: advantage Elo [CI]; slope [CI]")
+        dband = desc.set_index("band")
         for _, b in r["bands"].iterrows():
+            dd = dband.loc[b.band] if b.band in dband.index else None
+            dtxt = (f"; decisive at equal ratings {100 * dd.decisive_adj:.1f}%" if dd is not None else "")
             L.append(f"  {b.band}: n {b.games:,}; {b.advantage_elo:+.1f} [{b.advantage_lo:+.1f}, "
-                     f"{b.advantage_hi:+.1f}]; {b.gamma:.3f} [{b.gamma_lo:.3f}, {b.gamma_hi:.3f}]")
+                     f"{b.advantage_hi:+.1f}]; {b.gamma:.3f} [{b.gamma_lo:.3f}, {b.gamma_hi:.3f}]{dtxt}")
     return "\n".join(L) + "\n"
 
 
