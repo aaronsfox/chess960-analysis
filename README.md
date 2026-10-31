@@ -425,6 +425,19 @@ python code/chesscom960.py summarise   # counts to scope the analysis
 Requests are sequential, paused and cached in `data/chesscom/cache/`, so
 reruns resume; player names are stored as salted hashes.
 
+## Freestyle Friday analysis (analyse_chesscom960.py)
+
+```bash
+python code/analyse_chesscom960.py
+```
+
+The Lichess models on the Chess.com games, with Chess.com ratings on their
+own fitted scale: White's advantage at equal ratings, per-position
+rating-adjusted Delta_Elo and decisive rate, REML meta-regression on
+Stockfish/Caissa self-play Delta_Elo, game-level slopes overall and by thirds
+of mean rating, and Spearman agreement with the engines. Outputs in
+`results/chesscom960/analysis/`; figure `chesscom960_human_vs_selfplay`.
+
 ## Human play against engine self-play (compare_levels.py)
 
 ```bash

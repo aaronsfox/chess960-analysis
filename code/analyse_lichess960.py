@@ -352,6 +352,11 @@ def stage1(d: pd.DataFrame, beta: float) -> pd.DataFrame:
     """One intercept per position with the rating gap as an offset: White's
     human advantage at equal ratings, in Elo, with SEs clustered on the
     player pair within each position (rematches)."""
+    with np.errstate(divide="ignore", invalid="ignore"):   # positions without games -> NaN
+        return _stage1(d, beta)
+
+
+def _stage1(d: pd.DataFrame, beta: float) -> pd.DataFrame:
     pos = d.position_id.to_numpy(np.int64)
     y = d.score_white.to_numpy(float)
     off = beta * rating_x(d)

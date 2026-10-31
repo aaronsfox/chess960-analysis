@@ -495,8 +495,15 @@ def levels_comparison(pool: pd.DataFrame, lichess_dir: Path = LICHESS,
             rows.append({"source": "Lichess titled", "level": "titled", "games": int(t.games.iloc[0]),
                          "advantage_elo": t.advantage_elo.iloc[0], "advantage_lo": t.advantage_lo.iloc[0],
                          "advantage_hi": t.advantage_hi.iloc[0], **dec_cols(dt.iloc[0])})
+    cc = REPO_ROOT / "results" / "chesscom960" / "analysis"
+    if (cc / "chesscom960_descriptives.csv").exists() and (cc / "chesscom960_rating_model.csv").exists():
+        cd = pd.read_csv(cc / "chesscom960_descriptives.csv").iloc[0]
+        cr = pd.read_csv(cc / "chesscom960_rating_model.csv").iloc[0]
+        rows.append({"source": "Chess.com Freestyle Friday", "level": "titled", "games": int(cd.games),
+                     "advantage_elo": cr.advantage_elo, "advantage_lo": cr.advantage_lo,
+                     "advantage_hi": cr.advantage_hi, **dec_cols(cd)})
     for _, r in pool[pool.group.isin(["time control", "rating"])].iterrows():
-        rows.append({"source": "Masters OTB " + ("" if r.group == "rating" else "(time control)").strip(),
+        rows.append({"source": "Masters OTB" if r.group == "rating" else "Masters OTB (time control)",
                      "level": r.level, "games": r.games, "advantage_elo": r.advantage_elo,
                      "advantage_lo": r.advantage_lo, "advantage_hi": r.advantage_hi, **dec_cols(r)})
     if selfplay.exists():
@@ -570,23 +577,26 @@ def fig_case_positions(d: pd.DataFrame, eng: pd.DataFrame, out_dir: Path) -> lis
 
 def level_label(source: str, lev: str) -> str:
     if source == "Lichess titled":
-        return "Lichess\ntitled"
+        return "Lichess titled"
     if source.startswith("Lichess"):
-        return f"Lichess\n{source.split()[-1]}\n{lev}"
+        return f"Lichess {source.split()[-1]} {lev}"
     if source.startswith("Masters"):
-        return f"Masters\nOTB\n{lev}"
-    return f"Self-play\n{lev}"
+        return f"Masters OTB {lev}"
+    if source.startswith("Chess.com"):
+        return "Chess.com Freestyle Friday"
+    return f"{lev} self-play"
 
 
 def fig_levels(levels: pd.DataFrame, out_dir: Path) -> list[Path]:
     """White's advantage (top) and decisive rate (bottom) from Lichess club level
     through titled players and over-the-board masters to engines."""
     plt = apply_style()
-    order = levels[~levels.source.str.contains(r"\(time control\)")].reset_index(drop=True)
+    # Masters by time control (rating-level groups are too thin at small gaps).
+    order = levels[~levels.source.eq("Masters OTB") & levels.decisive.notna()].reset_index(drop=True)
     labels = [level_label(r.source, r.level) for r in order.itertuples()]
     x = np.arange(len(order))
-    fig, axes = plt.subplots(2, 1, figsize=(7.0, 4.8), sharex=True, gridspec_kw={"hspace": 0.12})
-    colours = ["#111111" if s.startswith("Lichess") else ("#555555" if s.startswith("Masters") else
+    fig, axes = plt.subplots(2, 1, figsize=(7.0, 5.4), sharex=True, gridspec_kw={"hspace": 0.12})
+    colours = ["#111111" if s.startswith("Lichess") else ("#555555" if s.startswith(("Masters", "Chess.com")) else
                ENGINES[r.lower()].colour if r.lower() in ENGINES else "#999999")
                for s, r in zip(order.source, order.level)]
     ax = axes[0]
@@ -600,7 +610,7 @@ def fig_levels(levels: pd.DataFrame, out_dir: Path) -> list[Path]:
     axes[1].errorbar(x, 100 * order.decisive, yerr=np.nan_to_num(err), fmt="none", ecolor="#999999",
                      elinewidth=0.8, capsize=0)
     axes[1].set_ylabel("Decisive at Equal Ratings (%)")
-    axes[1].set_xticks(x, labels, fontsize=6)
+    axes[1].set_xticks(x, labels, fontsize=6.5, rotation=40, ha="right", rotation_mode="anchor")
     for a in axes:
         bold_tick_labels(a)
     return save_fig(fig, "masters960_levels", out_dir)

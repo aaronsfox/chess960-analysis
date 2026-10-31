@@ -1,0 +1,31 @@
+Chess.com Freestyle Friday: analysis summary
+============================================
+
+Inclusion:
+  parsed: 52,296
+  Chess960 position identified: 52,296
+  known result: 52,296
+  at least 10 plies: 51,386
+  both ratings: 51,386
+
+51,386 games, 80 tournaments, 2,588 players, 568 positions (median 75 games each)
+W/D/L 48.2 / 7.2 / 44.5%; raw Delta_Elo +12.9
+Decisive rate: raw 92.8%; at equal ratings 89.0% [88.1, 89.8]
+Rating model: White advantage at equal ratings +13.8 [+10.8, +16.9] Elo; beta 0.363 [0.332, 0.395] (1 = Elo scale on Chess.com ratings)
+Positions: mean SE 41.8 Elo; tau 0.0 [0.0, 11.2] (p 1); positions used 568
+  meta-regression on stockfish: slope 0.066 [-0.121, 0.252] (p 0.491); corrected 0.077; rho 0.060
+  meta-regression on caissa: slope 0.031 [-0.135, 0.198] (p 0.712); corrected 0.040; rho 0.037
+Game-level slopes (position-clustered):
+  stockfish / all (ratings 1058-2934, n 51,386): advantage +13.8 [+10.7, +16.8]; slope 0.091 [-0.092, 0.274]
+  stockfish / lower third (ratings 1058-2043, n 17,143): advantage +12.9 [+7.8, +18.0]; slope 0.190 [-0.105, 0.486]
+  stockfish / middle third (ratings 2044-2341, n 17,133): advantage +11.8 [+6.2, +17.4]; slope -0.077 [-0.431, 0.277]
+  stockfish / upper third (ratings 2342-2934, n 17,110): advantage +17.1 [+11.9, +22.4]; slope 0.158 [-0.184, 0.499]
+  caissa / all (ratings 1058-2934, n 51,386): advantage +13.7 [+10.7, +16.8]; slope 0.061 [-0.099, 0.220]
+  caissa / lower third (ratings 1058-2043, n 17,143): advantage +12.8 [+7.7, +17.9]; slope 0.157 [-0.096, 0.410]
+  caissa / middle third (ratings 2044-2341, n 17,133): advantage +11.6 [+6.0, +17.2]; slope 0.066 [-0.242, 0.373]
+  caissa / upper third (ratings 2342-2934, n 17,110): advantage +17.3 [+12.0, +22.6]; slope -0.046 [-0.348, 0.257]
+Agreement with the engines across positions with >= 20 games (Spearman rho):
+  stockfish: Delta_Elo +0.060 [-0.026, +0.142]; decisive rate at equal ratings +0.073 [-0.005, +0.158] (560 positions)
+  caissa: Delta_Elo +0.037 [-0.040, +0.116]; decisive rate at equal ratings +0.153 [+0.074, +0.235] (560 positions)
+#868: 89 games; -26.4 [-88.3, +35.6]; Stockfish +109
+#879: 34 games; -3.6 [-113.7, +106.4]; Stockfish +108
