@@ -100,6 +100,8 @@ def download(sources: pd.DataFrame, out_dir: Path = DATA) -> None:
             req = urllib.request.Request(r.url, headers={"User-Agent": "chess960-fairness research"})
             with urllib.request.urlopen(req, timeout=60) as resp:
                 body = resp.read()
+            if r.url.lower().endswith(".zip"):      # a TWIC weekly issue: keep its PGN
+                body = pgn_from_zip(body)
             if b"[Event" not in body[:5000]:
                 raise ValueError("response is not a PGN file (wrong URL or an error page?)")
             dest.write_bytes(body)
@@ -114,6 +116,16 @@ def download(sources: pd.DataFrame, out_dir: Path = DATA) -> None:
         print("Save these by hand into", out_dir, "(same file names), then run `parse`:")
         for r in failed:
             print(f"  {r.file}: {r.url}")
+
+
+def pgn_from_zip(body: bytes) -> bytes:
+    import io
+    import zipfile
+    with zipfile.ZipFile(io.BytesIO(body)) as z:
+        names = [n for n in z.namelist() if n.lower().endswith(".pgn")]
+        if not names:
+            raise ValueError("zip has no .pgn file")
+        return b"\n".join(z.read(n) for n in names)
 
 
 def count_games(path: Path) -> int:
@@ -151,7 +163,10 @@ def game_record(h: dict[str, str], movetext: str, src: dict) -> dict:
     first = np.nanmax([w0, b0]) if np.isfinite([w0, b0]).any() else np.nan
     # A game in a file whose first clocks are far below the event's base time
     # is a tiebreak at a faster control: classify it by its own clocks.
-    base = first if np.isfinite(first) and first < 0.5 * source_base else source_base
+    # A game whose first clocks are far from the event's base time (a faster
+    # tiebreak, or a classical game in a mixed file) is classed by its own clocks.
+    base = (first if np.isfinite(first) and (first < 0.5 * source_base or first > 1.5 * source_base)
+            else source_base)
     text = f"{h.get('Event', '')} {h.get('Round', '')}".lower()
     unequal = (np.isfinite(w0) and np.isfinite(b0) and max(w0, b0) > 0
                and abs(w0 - b0) / max(w0, b0) > ARMAGEDDON_RATIO)
@@ -191,7 +206,10 @@ def parse(sources: pd.DataFrame, data_dir: Path = DATA, out: Path = OUT) -> pd.D
             print(f"{f.name:<24} not in {SOURCES.name}: event details unknown, add a row for it")
             src = {"file": f.name}
         with open(f, encoding="utf-8", errors="replace") as fh:
-            recs = [game_record(h, mt, src) for h, mt in iter_games(fh)]
+            flt = src.get("event_filter")
+            flt = re.compile(flt, re.I) if isinstance(flt, str) and flt else None
+            recs = [game_record(h, mt, src) for h, mt in iter_games(fh)
+                    if flt is None or flt.search(h.get("Event", ""))]
         rows += recs
         r = pd.DataFrame(recs)
         if r.empty:

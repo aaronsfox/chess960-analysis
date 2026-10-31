@@ -88,3 +88,18 @@ def test_advantage_offset():
     d = pd.DataFrame({"white_elo": we, "black_elo": be, "score_white": (rng.random(n) < p).astype(float)})
     a = M.advantage(d)
     assert a["advantage_lo"] < 20 < a["advantage_hi"]
+
+
+def test_event_filter_and_zip(tmp_path):
+    import zipfile
+    other = PGN.replace("Freestyle Paris KO", "Some Open")
+    buf = tmp_path / "w.zip"
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("twic.pgn", PGN + "\n" + other)
+    body = M.pgn_from_zip(buf.read_bytes())
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "weekly.pgn").write_bytes(body)
+    src = pd.DataFrame([{**SRC, "file": "weekly.pgn", "event_filter": "Paris"}])
+    g = M.parse(src, data, tmp_path / "out")
+    assert len(g) == 4 and set(g.pgn_event.str.contains("Paris")) == {True}
