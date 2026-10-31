@@ -391,7 +391,10 @@ python code/analyse_lichess960.py all      # or: prepare, then analyse
 
 Over-the-board Chess960 / Freestyle events (Freestyle Grand Slam Tour, grenke
 Freestyle Open, FIDE World Fischer Random Championship, Champions Showdown
-9LX), as TWIC PGN files listed in `config/masters960_sources.csv`.
+9LX), as PGN files listed in `config/masters960_sources.csv`: TWIC files, a TWIC
+weekly zip (with `event_filter` to keep one event), or a Lichess broadcast round
+URL (the whole tournament is exported through the Lichess API; add `#group` to
+export every tournament in the broadcast group).
 
 ```bash
 python code/masters960.py download   # into data/masters/ (ignored by git); or save files there by hand

@@ -97,9 +97,10 @@ def download(sources: pd.DataFrame, out_dir: Path = DATA) -> None:
             skipped.append(r.file)
             continue
         try:
-            req = urllib.request.Request(r.url, headers={"User-Agent": "chess960-fairness research"})
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                body = resp.read()
+            if r.url.startswith("https://lichess.org/broadcast/"):
+                body = lichess_broadcast_pgn(r.url)
+            else:
+                body = fetch(r.url)
             if r.url.lower().endswith(".zip"):      # a TWIC weekly issue: keep its PGN
                 body = pgn_from_zip(body)
             if b"[Event" not in body[:5000]:
@@ -116,6 +117,43 @@ def download(sources: pd.DataFrame, out_dir: Path = DATA) -> None:
         print("Save these by hand into", out_dir, "(same file names), then run `parse`:")
         for r in failed:
             print(f"  {r.file}: {r.url}")
+
+
+def fetch(url: str, accept: str | None = None) -> bytes:
+    headers = {"User-Agent": "chess960-fairness research"}
+    if accept:
+        headers["Accept"] = accept
+    with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=120) as resp:
+        return resp.read()
+
+
+def lichess_broadcast_pgn(url: str) -> bytes:
+    """All games of a Lichess broadcast, from the URL of any of its rounds
+    (https://lichess.org/broadcast/<tour-slug>/<round-slug>/<round-id>[/<game-id>]).
+    The round's tournament is exported with /api/broadcast/<tour-id>.pgn. With
+    '#group' at the end of the URL, every tournament in the round's broadcast
+    group is exported (e.g. both round-robin groups and the knockout)."""
+    import json
+    group = url.endswith("#group")
+    parts = url.split("#")[0].rstrip("/").split("/broadcast/")[1].split("/")
+    if len(parts) < 3:
+        raise ValueError("expected a round URL: /broadcast/<tour-slug>/<round-slug>/<round-id>")
+    tslug, rslug, round_id = parts[:3]
+    info = json.loads(fetch(f"https://lichess.org/api/broadcast/{tslug}/{rslug}/{round_id}",
+                            accept="application/json"))
+    tours = [(info["tour"]["id"], info["tour"].get("name", ""))]
+    if group:
+        g = info.get("group") or {}
+        if g.get("tours"):
+            tours = [(t["id"], t.get("name", "")) for t in g["tours"]]
+        else:
+            print("    (no broadcast group found; exporting this tournament only)")
+    chunks = []
+    for tid, name in tours:
+        pgn = fetch(f"https://lichess.org/api/broadcast/{tid}.pgn")
+        print(f"    Lichess broadcast {tid} {name}: {pgn.count(b'[Event ')} games")
+        chunks.append(pgn)
+    return b"\n\n".join(chunks)
 
 
 def pgn_from_zip(body: bytes) -> bytes:
