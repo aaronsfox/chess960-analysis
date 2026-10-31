@@ -20,9 +20,11 @@ results/*
 !results/lichess960/
 !results/masters960/
 !results/compare_levels/
+!results/chesscom960/
 logs/
 data/lichess/
 data/masters/
+data/chesscom/
 results/lichess960/prepared/
 *.tmp
 

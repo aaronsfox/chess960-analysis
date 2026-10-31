@@ -410,6 +410,21 @@ the FIDE rating gap as an offset (beta = 1) with position-clustered SEs.
 Figures: `masters960_case_positions` and `masters960_levels` (White's
 advantage and draw rate from Lichess club level to engines).
 
+## Chess.com Freestyle Friday (chesscom960.py)
+
+Weekly Chess960 Swiss tournaments for titled players on Chess.com (11 rounds,
+3+1, from January 2025), from Chess.com's public Published-Data API.
+
+```bash
+python code/chesscom960.py discover    # tournament IDs, from regular players' archives
+python code/chesscom960.py fetch       # each tournament's games -> data/chesscom/ff/ (ignored by git)
+python code/chesscom960.py parse       # -> results/chesscom960/chesscom960_games.parquet
+python code/chesscom960.py summarise   # counts to scope the analysis
+```
+
+Requests are sequential, paused and cached in `data/chesscom/cache/`, so
+reruns resume; player names are stored as salted hashes.
+
 ## Human play against engine self-play (compare_levels.py)
 
 ```bash
