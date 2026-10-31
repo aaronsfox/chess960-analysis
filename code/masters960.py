@@ -24,7 +24,7 @@ analyse   Inclusion: position identified, not Armageddon, at least 10 plies
               (FIDE Elo, so beta = 1): White's advantage at equal ratings and
               the slope on Stockfish / Caissa self-play Delta_Elo, overall,
               by time-control class and by rating level, position-clustered;
-            - a comparison of White's advantage and the draw rate across
+            - a comparison of White's advantage and the decisive rate across
               playing levels: Lichess bands, Lichess titled, masters, engines;
             - figures: case-study positions and the levels comparison.
 
@@ -349,7 +349,7 @@ def events_table(d: pd.DataFrame) -> pd.DataFrame:
 
 def levels_comparison(pool: pd.DataFrame, lichess_dir: Path = LICHESS,
                       selfplay: Path = SELFPLAY) -> pd.DataFrame:
-    """White's advantage (at equal ratings for humans) and the draw rate
+    """White's advantage (at equal ratings for humans) and the decisive rate
     from club level to engines."""
     rows = []
     desc_p, bands_p, rm_p = (lichess_dir / f"lichess960_{k}.csv"
@@ -384,7 +384,9 @@ def levels_comparison(pool: pd.DataFrame, lichess_dir: Path = LICHESS,
                          "advantage_elo": 400 * np.log10(e_score / (1 - e_score)),
                          "advantage_lo": np.nan, "advantage_hi": np.nan,
                          "draws": g.draws.sum() / n})
-    return pd.DataFrame(rows)
+    out = pd.DataFrame(rows)
+    out["decisive"] = 1 - out.draws
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -444,7 +446,7 @@ def level_label(source: str, lev: str) -> str:
 
 
 def fig_levels(levels: pd.DataFrame, out_dir: Path) -> list[Path]:
-    """White's advantage (left) and draw rate (right) from Lichess club level
+    """White's advantage (top) and decisive rate (bottom) from Lichess club level
     through titled players and over-the-board masters to engines."""
     plt = apply_style()
     order = levels[~levels.source.str.contains(r"\(time control\)")].reset_index(drop=True)
@@ -460,8 +462,8 @@ def fig_levels(levels: pd.DataFrame, out_dir: Path) -> list[Path]:
         yerr = None if pd.isna(r.advantage_lo) else [[r.advantage_elo - r.advantage_lo], [r.advantage_hi - r.advantage_elo]]
         ax.errorbar(i, r.advantage_elo, yerr=yerr, fmt="o", ms=4.5, color=colours[i], elinewidth=1.0, capsize=0)
     ax.set_ylabel(f"White Advantage {METRICS['delta_elo'].bold_symbol}")
-    axes[1].bar(x, 100 * order.draws, color=colours, width=0.6)
-    axes[1].set_ylabel("Draws (%)")
+    axes[1].bar(x, 100 * (1 - order.draws), color=colours, width=0.6)
+    axes[1].set_ylabel("Decisive (%)")
     axes[1].set_xticks(x, labels, fontsize=6)
     for a in axes:
         bold_tick_labels(a)

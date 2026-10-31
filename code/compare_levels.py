@@ -1,34 +1,30 @@
-"""Human play against engine self-play on the win/draw/loss simplex.
+"""Lichess human play against engine self-play on the win/draw/loss simplex.
 
-Applies the self-play outcome model to the human games: for every source and
-position, a Dirichlet posterior on (White wins, draws, Black wins) with the
-Jeffreys prior, Dirichlet(1/2 + counts / DEFF). DEFF is the self-play design
-effect for the engines and 1 for humans (rematch clustering changed the
-Lichess SEs by under 1%). From 20,000 draws per position: E_score,
-Delta_Elo and the draw rate with 95% credible intervals, P(favours White)
-and P(within +/-5 Elo).
+Applies the self-play outcome model to the Lichess games: for every source
+and position, a Dirichlet posterior on (White wins, draws, Black wins) with
+the Jeffreys prior, Dirichlet(1/2 + counts / DEFF). DEFF is the self-play
+design effect for the engines and 1 for Lichess (rematch clustering changed
+the Lichess SEs by under 1%). From 20,000 draws per position: E_score,
+Delta_Elo and the decisive rate (1 - draw rate) with 95% credible intervals,
+P(favours White) and P(within +/-5 Elo).
 
-Sources: Stockfish and Caissa self-play; Lichess blitz, rapid and titled
-players (counts from analyse_lichess960.py); master-level over-the-board
-games (counts from masters960.py). Human counts are raw: positions are
-assigned at random, so rating gaps average out over a position's games (the
-rating-adjusted estimates are in the other two analyses).
+Sources: Stockfish and Caissa self-play; Lichess blitz and rapid (counts from
+analyse_lichess960.py). The titled-player and master sets are too sparse per
+position for this analysis (median 8 and 5 games). Lichess counts are raw:
+positions are assigned at random, so rating gaps average out over a
+position's games (the rating-adjusted estimates are in analyse_lichess960.py).
 
 Outputs (results/compare_levels/):
   compare_posteriors.csv  every source x position
-  compare_sources.csv     per source: games, W/D/L, pooled Delta_Elo and
-                          draw rate, median credible-interval width, counts
-                          of positions favouring White / within +/-5 Elo
-  compare_agreement.csv   human source vs engine, across positions with at
-                          least MIN_GAMES games: Spearman rho (bootstrap CI)
-                          for Delta_Elo and for the draw rate
-Figures (results/figures/):
-  compare_ternary          top: every position's posterior mean per source in
-                           the full triangle; bottom: 50%/95% highest-density
-                           regions for #868, #518, #674, #226 by source
-  compare_ternary_masters  the eight positions with most master games: master
-                           posterior against Stockfish, Caissa and Lichess
-                           blitz on the same position
+  compare_sources.csv     per source: games, W/D/L, decisive rate, pooled
+                          Delta_Elo, median credible-interval width, counts of
+                          positions favouring White / within +/-5 Elo
+  compare_agreement.csv   Lichess set vs engine, across positions: Spearman rho
+                          (bootstrap CI) for Delta_Elo and for the decisive rate
+Figure (results/figures/):
+  compare_ternary  top: every position's posterior mean per source in the full
+                   triangle; bottom: 50%/95% highest-density regions for #868,
+                   #518, #674, #226 by source
 
     python code/compare_levels.py
 """
@@ -53,7 +49,6 @@ log = logging.getLogger("compare_levels")
 
 SELFPLAY = REPO_ROOT / "results" / "selfplay" / "analysis"
 LICHESS = REPO_ROOT / "results" / "lichess960" / "analysis" / "lichess960_positions.csv"
-MASTERS = REPO_ROOT / "results" / "masters960" / "masters960_positions.csv"
 OUT = REPO_ROOT / "results" / "compare_levels"
 FIGURES = REPO_ROOT / "results" / "figures"
 
@@ -65,13 +60,11 @@ N_BOOT = 2000
 SOURCES = {
     "lichess_blitz": ("Lichess blitz", "#111111", "o", True),
     "lichess_rapid": ("Lichess rapid", "#8c8c8c", "o", True),
-    "lichess_titled": ("Lichess titled", ENGINES["lc0"].colour, "^", False),
-    "masters": ("Masters OTB", ENGINES["plentychess"].colour, "D", False),
     "caissa": ("Caissa self-play", ENGINES["caissa"].colour, ENGINES["caissa"].marker, True),
     "stockfish": ("Stockfish self-play", ENGINES["stockfish"].colour, ENGINES["stockfish"].marker, True),
 }
 ENGINE_SOURCES = ("stockfish", "caissa")
-HUMAN_SOURCES = ("lichess_blitz", "lichess_rapid", "lichess_titled", "masters")
+HUMAN_SOURCES = ("lichess_blitz", "lichess_rapid")
 ZOOM_SOURCES = ("lichess_blitz", "lichess_rapid", "caissa", "stockfish")
 
 
@@ -84,7 +77,7 @@ def elo(e):
 # Data
 # ---------------------------------------------------------------------------
 
-def load_counts(selfplay: Path = SELFPLAY, lichess: Path = LICHESS, masters: Path = MASTERS) -> tuple[pd.DataFrame, dict]:
+def load_counts(selfplay: Path = SELFPLAY, lichess: Path = LICHESS) -> tuple[pd.DataFrame, dict]:
     """One row per source x position: games, white_wins, draws, black_wins."""
     cols = ["source", "position_id", "games", "white_wins", "draws", "black_wins"]
     parts = []
@@ -96,14 +89,9 @@ def load_counts(selfplay: Path = SELFPLAY, lichess: Path = LICHESS, masters: Pat
     deff = {e: float(q.loc[e, "deff"]) for e in ENGINE_SOURCES}
     if lichess.exists():
         li = pd.read_csv(lichess)
-        for s in ("blitz", "rapid", "titled"):
+        for s in ("blitz", "rapid"):
             g = li[li.set == s].assign(source=f"lichess_{s}")
             parts.append(g[cols])
-    if masters.exists():
-        m = pd.read_csv(masters).assign(source="masters")
-        for c in ("white_wins", "draws", "black_wins"):     # fractions -> counts
-            m[c] = (m[c] * m.games).round().astype(int)
-        parts.append(m[cols])
     counts = pd.concat(parts, ignore_index=True)
     counts = counts[counts.games > 0]
     for s in counts.source.unique():
@@ -129,8 +117,8 @@ def posteriors(counts: pd.DataFrame, deff: dict) -> pd.DataFrame:
                      "deff": deff[r.source],
                      "escore_mean": e.mean(), "delta_elo_median": float(np.median(de)),
                      "delta_elo_lo": interval(de)[0], "delta_elo_hi": interval(de)[1],
-                     "draw_mean": p[:, 1].mean(), "draw_lo": interval(p[:, 1])[0],
-                     "draw_hi": interval(p[:, 1])[1],
+                     "decisive_mean": 1 - p[:, 1].mean(), "decisive_lo": 1 - interval(p[:, 1])[1],
+                     "decisive_hi": 1 - interval(p[:, 1])[0],
                      "p_favours_white": float((e > hi_e).mean()),
                      "p_balanced": float(((e >= lo_e) & (e <= hi_e)).mean()),
                      "p_favours_black": float((e < lo_e).mean())})
@@ -145,7 +133,7 @@ def source_summary(post: pd.DataFrame) -> pd.DataFrame:
         w = g.delta_elo_hi - g.delta_elo_lo
         rows.append({"source": s, "label": SOURCES[s][0], "positions": len(g), "games": int(n),
                      "games_per_position_median": float(g.games.median()),
-                     "white_wins": g.white_wins.sum() / n, "draws": g.draws.sum() / n,
+                     "white_wins": g.white_wins.sum() / n, "draws": g.draws.sum() / n, "decisive": 1 - g.draws.sum() / n,
                      "black_wins": g.black_wins.sum() / n, "escore": e, "delta_elo_pooled": elo(e),
                      "delta_elo_median_of_positions": float(g.delta_elo_median.median()),
                      "ci_width_median": float(w.median()),
@@ -173,10 +161,10 @@ def agreement(post: pd.DataFrame) -> pd.DataFrame:
             eg = post[post.source == e].set_index("position_id").reindex(hg.index)
             rng = rng_for("agreement", h, e)
             r_elo = spearman_ci(eg.delta_elo_median.to_numpy(), hg.delta_elo_median.to_numpy(), rng)
-            r_draw = spearman_ci(eg.draw_mean.to_numpy(), hg.draw_mean.to_numpy(), rng)
+            r_dec = spearman_ci(eg.decisive_mean.to_numpy(), hg.decisive_mean.to_numpy(), rng)
             rows.append({"human": h, "engine": e, "positions": len(hg),
                          "rho_delta_elo": r_elo[0], "rho_delta_elo_lo": r_elo[1], "rho_delta_elo_hi": r_elo[2],
-                         "rho_draws": r_draw[0], "rho_draws_lo": r_draw[1], "rho_draws_hi": r_draw[2]})
+                         "rho_decisive": r_dec[0], "rho_decisive_lo": r_dec[1], "rho_decisive_hi": r_dec[2]})
     return pd.DataFrame(rows)
 
 
@@ -277,16 +265,6 @@ def fig_ternary(post: pd.DataFrame, out_dir: Path) -> list[Path]:
     return save(fig, "compare_ternary", out_dir)
 
 
-def fig_ternary_masters(post: pd.DataFrame, out_dir: Path, n: int = 8) -> list[Path]:
-    plt = apply_style()
-    m = post[post.source == "masters"].sort_values("games", ascending=False).head(n)
-    fig, axes = plt.subplots(2, 4, figsize=(7.0, 7.4), gridspec_kw={"hspace": 0.3, "wspace": 0.08})
-    for k, (ax, pos) in enumerate(zip(axes.ravel(), m.position_id)):
-        strip_panel(ax, post, int(pos), ("lichess_blitz", "masters", "caissa", "stockfish"),
-                    xlim=(0.25, 0.75), ylab=(k % 4 == 0))
-    return save(fig, "compare_ternary_masters", out_dir)
-
-
 def save(fig, name: str, out_dir: Path) -> list[Path]:
     import matplotlib.pyplot as plt
     paths = [out_dir / f"{name}.pdf", out_dir / f"{name}.png"]
@@ -303,6 +281,7 @@ def summary_text(src: pd.DataFrame, agree: pd.DataFrame, post: pd.DataFrame) -> 
     for r in src.itertuples():
         L.append(f"{r.label:<20} {r.positions:>4} positions, {r.games:>9,} games (median {r.games_per_position_median:,.0f}"
                  f"/position); W/D/L {100 * r.white_wins:.1f}/{100 * r.draws:.1f}/{100 * r.black_wins:.1f}%; "
+                 f"decisive {100 * r.decisive:.1f}%; "
                  f"pooled {r.delta_elo_pooled:+.1f} Elo; median CrI width {r.ci_width_median:.0f}; "
                  f"CrI > 0: {r.positions_ci_above_0}, < 0: {r.positions_ci_below_0}, within +/-5: "
                  f"{r.positions_ci_within_5}")
@@ -310,8 +289,8 @@ def summary_text(src: pd.DataFrame, agree: pd.DataFrame, post: pd.DataFrame) -> 
     for r in agree.itertuples():
         L.append(f"  {SOURCES[r.human][0]} vs {SOURCES[r.engine][0]} ({r.positions} positions): "
                  f"Delta_Elo {r.rho_delta_elo:+.3f} [{r.rho_delta_elo_lo:+.3f}, {r.rho_delta_elo_hi:+.3f}]; "
-                 f"draws {r.rho_draws:+.3f} [{r.rho_draws_lo:+.3f}, {r.rho_draws_hi:+.3f}]")
-    L += ["", "Positions in the ternary panels (Delta_Elo median [95% CrI]; draws %):"]
+                 f"decisive rate {r.rho_decisive:+.3f} [{r.rho_decisive_lo:+.3f}, {r.rho_decisive_hi:+.3f}]")
+    L += ["", "Positions in the ternary panels (Delta_Elo median [95% CrI]; decisive %):"]
     for pos in TERNARY_POSITIONS:
         parts = []
         for s in SOURCES:
@@ -319,7 +298,7 @@ def summary_text(src: pd.DataFrame, agree: pd.DataFrame, post: pd.DataFrame) -> 
             if len(r):
                 r = r.iloc[0]
                 parts.append(f"{SOURCES[s][0]} {r.delta_elo_median:+.0f} [{r.delta_elo_lo:+.0f}, "
-                             f"{r.delta_elo_hi:+.0f}], {100 * r.draw_mean:.0f}% (n {r.games})")
+                             f"{r.delta_elo_hi:+.0f}], {100 * r.decisive_mean:.0f}% (n {r.games})")
         L.append(f"  #{pos} {get_position(pos).arrangement}: " + "; ".join(parts))
     return "\n".join(L) + "\n"
 
@@ -341,7 +320,7 @@ def main(argv: list[str] | None = None) -> int:
     text = summary_text(src, agree, post)
     (OUT / "compare_summary.txt").write_text(text)
     print(text)
-    for path in fig_ternary(post, FIGURES) + fig_ternary_masters(post, FIGURES):
+    for path in fig_ternary(post, FIGURES):
         if path.suffix == ".png":
             print(f"Figure: {path}")
     return 0

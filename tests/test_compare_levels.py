@@ -12,14 +12,14 @@ def test_posteriors_and_summary():
                            "black_wins": [450, 10]})
     post = C.posteriors(counts, {"lichess_blitz": 1.0, "stockfish": 1.64})
     b = post.set_index("source")
-    assert abs(b.loc["lichess_blitz", "draw_mean"] - 0.05) < 0.01
+    assert abs(b.loc["lichess_blitz", "decisive_mean"] - 0.95) < 0.01
     assert b.loc["stockfish", "delta_elo_lo"] < C.elo(0.53) < b.loc["stockfish", "delta_elo_hi"]
     # the design effect widens the engine interval relative to DEFF 1
     post1 = C.posteriors(counts.iloc[[1]], {"stockfish": 1.0})
     assert (b.loc["stockfish", "delta_elo_hi"] - b.loc["stockfish", "delta_elo_lo"]
             > post1.delta_elo_hi.iloc[0] - post1.delta_elo_lo.iloc[0])
     src = C.source_summary(post).set_index("source")
-    assert src.loc["stockfish", "draws"] == 0.9
+    assert src.loc["stockfish", "draws"] == 0.9 and abs(src.loc["stockfish", "decisive"] - 0.1) < 1e-12
 
 
 def test_fill_ratings():

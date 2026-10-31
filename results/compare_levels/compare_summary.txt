@@ -1,23 +1,19 @@
 Human play against engine self-play (Dirichlet posteriors)
 ==========================================================
 
-Stockfish self-play   960 positions,   480,000 games (median 500/position); W/D/L 7.6/90.4/2.0%; pooled +19.4 Elo; median CrI width 23; CrI > 0: 691, < 0: 0, within +/-5: 0
-Caissa self-play      960 positions,   480,000 games (median 500/position); W/D/L 12.5/82.6/4.9%; pooled +26.3 Elo; median CrI width 33; CrI > 0: 697, < 0: 0, within +/-5: 0
-Lichess blitz         960 positions, 1,286,150 games (median 1,339/position); W/D/L 48.7/5.0/46.3%; pooled +8.5 Elo; median CrI width 36; CrI > 0: 150, < 0: 1, within +/-5: 0
-Lichess rapid         960 positions,   423,308 games (median 441/position); W/D/L 47.9/6.3/45.8%; pooled +7.4 Elo; median CrI width 63; CrI > 0: 51, < 0: 8, within +/-5: 0
-Lichess titled        958 positions,     8,223 games (median 8/position); W/D/L 46.5/10.6/42.9%; pooled +12.6 Elo; median CrI width 432; CrI > 0: 33, < 0: 30, within +/-5: 0
-Masters OTB           129 positions,     1,206 games (median 5/position); W/D/L 38.8/28.1/33.1%; pooled +19.9 Elo; median CrI width 457; CrI > 0: 4, < 0: 0, within +/-5: 0
+Stockfish self-play   960 positions,   480,000 games (median 500/position); W/D/L 7.6/90.4/2.0%; decisive 9.6%; pooled +19.4 Elo; median CrI width 23; CrI > 0: 691, < 0: 0, within +/-5: 0
+Caissa self-play      960 positions,   480,000 games (median 500/position); W/D/L 12.5/82.6/4.9%; decisive 17.4%; pooled +26.3 Elo; median CrI width 33; CrI > 0: 697, < 0: 0, within +/-5: 0
+Lichess blitz         960 positions, 1,286,150 games (median 1,339/position); W/D/L 48.7/5.0/46.3%; decisive 95.0%; pooled +8.5 Elo; median CrI width 36; CrI > 0: 150, < 0: 1, within +/-5: 0
+Lichess rapid         960 positions,   423,308 games (median 441/position); W/D/L 47.9/6.3/45.8%; decisive 93.7%; pooled +7.4 Elo; median CrI width 63; CrI > 0: 51, < 0: 8, within +/-5: 0
 
 Agreement across positions with >= 30 games (Spearman rho [95% bootstrap CI]):
-  Lichess blitz vs Stockfish self-play (960 positions): Delta_Elo +0.050 [-0.011, +0.114]; draws +0.219 [+0.155, +0.277]
-  Lichess blitz vs Caissa self-play (960 positions): Delta_Elo +0.064 [+0.001, +0.126]; draws +0.196 [+0.134, +0.258]
-  Lichess rapid vs Stockfish self-play (960 positions): Delta_Elo +0.030 [-0.032, +0.095]; draws +0.154 [+0.092, +0.214]
-  Lichess rapid vs Caissa self-play (960 positions): Delta_Elo +0.019 [-0.044, +0.085]; draws +0.167 [+0.106, +0.226]
-  Masters OTB vs Stockfish self-play (9 positions): Delta_Elo +0.283 [-0.632, +0.948]; draws +0.283 [-0.652, +1.000]
-  Masters OTB vs Caissa self-play (9 positions): Delta_Elo +0.200 [-0.684, +0.837]; draws -0.200 [-0.948, +0.611]
+  Lichess blitz vs Stockfish self-play (960 positions): Delta_Elo +0.050 [-0.011, +0.114]; decisive rate +0.219 [+0.155, +0.277]
+  Lichess blitz vs Caissa self-play (960 positions): Delta_Elo +0.064 [+0.001, +0.126]; decisive rate +0.196 [+0.134, +0.258]
+  Lichess rapid vs Stockfish self-play (960 positions): Delta_Elo +0.030 [-0.032, +0.095]; decisive rate +0.154 [+0.092, +0.214]
+  Lichess rapid vs Caissa self-play (960 positions): Delta_Elo +0.019 [-0.044, +0.085]; decisive rate +0.167 [+0.106, +0.226]
 
-Positions in the ternary panels (Delta_Elo median [95% CrI]; draws %):
-  #868 QBBRKRNN: Lichess blitz +3 [-14, +21], 6% (n 1388); Lichess rapid +8 [-24, +40], 6% (n 432); Lichess titled +58 [-122, +251], 12% (n 11); Caissa self-play +97 [+75, +120], 66% (n 500); Stockfish self-play +109 [+89, +131], 67% (n 500)
-  #518 RNBQKBNR: Lichess blitz +3 [-16, +22], 6% (n 1248); Lichess rapid +20 [-12, +52], 8% (n 423); Lichess titled -51 [-290, +178], 20% (n 6); Caissa self-play +11 [-0, +23], 91% (n 500); Stockfish self-play +11 [+3, +20], 95% (n 500)
-  #674 BQRKNBNR: Lichess blitz -2 [-20, +17], 5% (n 1336); Lichess rapid +18 [-13, +50], 8% (n 434); Lichess titled +128 [-23, +290], 31% (n 13); Caissa self-play +2 [-13, +17], 86% (n 500); Stockfish self-play +1 [-9, +12], 92% (n 500)
-  #226 BNRQKBNR: Lichess blitz +4 [-14, +22], 6% (n 1383); Lichess rapid +6 [-24, +37], 10% (n 453); Lichess titled -3 [-222, +220], 18% (n 7); Caissa self-play +2 [-9, +13], 93% (n 500); Stockfish self-play +1 [-3, +7], 98% (n 500)
+Positions in the ternary panels (Delta_Elo median [95% CrI]; decisive %):
+  #868 QBBRKRNN: Lichess blitz +3 [-14, +21], 94% (n 1388); Lichess rapid +8 [-24, +40], 94% (n 432); Caissa self-play +97 [+75, +120], 34% (n 500); Stockfish self-play +109 [+89, +131], 33% (n 500)
+  #518 RNBQKBNR: Lichess blitz +3 [-16, +22], 94% (n 1248); Lichess rapid +20 [-12, +52], 92% (n 423); Caissa self-play +11 [-0, +23], 9% (n 500); Stockfish self-play +11 [+3, +20], 5% (n 500)
+  #674 BQRKNBNR: Lichess blitz -2 [-20, +17], 95% (n 1336); Lichess rapid +18 [-13, +50], 92% (n 434); Caissa self-play +2 [-13, +17], 14% (n 500); Stockfish self-play +1 [-9, +12], 8% (n 500)
+  #226 BNRQKBNR: Lichess blitz +4 [-14, +22], 94% (n 1383); Lichess rapid +6 [-24, +37], 90% (n 453); Caissa self-play +2 [-9, +13], 7% (n 500); Stockfish self-play +1 [-3, +7], 2% (n 500)
