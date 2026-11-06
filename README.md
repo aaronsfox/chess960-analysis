@@ -438,6 +438,21 @@ Stockfish/Caissa self-play Delta_Elo, game-level slopes overall and by thirds
 of mean rating, and Spearman agreement with the engines. Outputs in
 `results/chesscom960/analysis/`; figure `chesscom960_human_vs_selfplay`.
 
+## Comparisons across human datasets (compare_human_datasets.py)
+
+```bash
+python code/compare_human_datasets.py
+```
+
+Needs the outputs of analyse_lichess960.py (including the prepared games),
+analyse_chesscom960.py and masters960.py. Writes `results/compare_human/`:
+White's advantage per dataset with pairwise differences and Cochran's Q;
+Cochran's Q for differences between positions within each dataset and
+Spearman rho of per-position Delta_Elo between datasets; Spearman rho with
+Stockfish/Caissa self-play overall and within Lichess rating bands and
+Freestyle Friday rating thirds, each with the rho expected under full transfer
+of the engine-measured imbalance.
+
 ## Human play against engine self-play (compare_levels.py)
 
 ```bash

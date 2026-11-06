@@ -1,0 +1,60 @@
+Comparisons across human-play datasets
+======================================
+
+1. White's advantage at equal ratings (Delta_Elo [95% CI])
+  Lichess blitz      +10.5 [+9.8, +11.1]  (n 1,286,150)
+  Lichess rapid       +9.7 [+8.6, +10.8]  (n 423,308)
+  Freestyle Friday   +13.8 [+10.8, +16.9]  (n 51,386)
+  Masters OTB        +14.6 [+1.8, +27.4]  (n 2,208)
+  Heterogeneity across datasets: Q 6.99 on 3 df, p 0.0722
+  Pairwise differences (second minus first):
+    Lichess rapid - Lichess blitz: -0.8 [-2.1, +0.5], p 0.212
+    Freestyle Friday - Lichess blitz: +3.3 [+0.2, +6.5], p 0.0365
+    Masters OTB - Lichess blitz: +4.1 [-8.7, +16.9], p 0.53
+    Freestyle Friday - Lichess rapid: +4.1 [+0.9, +7.4], p 0.0124
+    Masters OTB - Lichess rapid: +4.9 [-8.0, +17.8], p 0.454
+    Masters OTB - Freestyle Friday: +0.8 [-12.4, +13.9], p 0.908
+
+2a. Do positions differ within a dataset? (Cochran's Q on per-position Delta_Elo)
+  Lichess blitz     k 960: Q 1010.2 on 959 df (Q/df 1.05), p 0.122; CIs excluding the pooled +10.5: 52 (expected 48)
+  Lichess rapid     k 960: Q 924.2 on 959 df (Q/df 0.96), p 0.785; CIs excluding the pooled +9.6: 44 (expected 48)
+  Freestyle Friday  k 568: Q 568.0 on 567 df (Q/df 1.00), p 0.48; CIs excluding the pooled +13.0: 31 (expected 28)
+  Masters OTB       k 23: Q 15.5 on 22 df (Q/df 0.71), p 0.838; CIs excluding the pooled +9.1: 1 (expected 1)
+
+2b. Do positions rank alike across datasets? (Spearman rho of per-position Delta_Elo)
+  Lichess blitz vs Lichess rapid (960 positions): rho +0.024 [-0.041, +0.088]; expected if both reflected Stockfish: 0.44
+  Lichess blitz vs Freestyle Friday (568 positions): rho -0.018 [-0.102, +0.062]; expected if both reflected Stockfish: 0.25
+  Lichess blitz vs Masters OTB (23 positions): rho +0.217 [-0.246, +0.611]; expected if both reflected Stockfish: 0.31
+  Lichess rapid vs Freestyle Friday (568 positions): rho -0.027 [-0.107, +0.057]; expected if both reflected Stockfish: 0.20
+  Lichess rapid vs Masters OTB (23 positions): rho -0.120 [-0.516, +0.317]; expected if both reflected Stockfish: 0.22
+  Freestyle Friday vs Masters OTB (11 positions): rho +0.082 [-0.556, +0.761]; expected if both reflected Stockfish: 0.19
+
+3. Transfer of engine imbalance (Spearman rho, human vs self-play Delta_Elo)
+  Lichess blitz     all                          stockfish k 960: rho +0.049 [-0.012, +0.110]; expected if full transfer 0.74
+  Lichess blitz     all                          caissa    k 960: rho +0.056 [-0.006, +0.117]; expected if full transfer 0.82
+  Lichess rapid     all                          stockfish k 960: rho +0.021 [-0.042, +0.083]; expected if full transfer 0.57
+  Lichess rapid     all                          caissa    k 960: rho -0.002 [-0.067, +0.060]; expected if full transfer 0.66
+  Freestyle Friday  all                          stockfish k 568: rho +0.060 [-0.021, +0.135]; expected if full transfer 0.31
+  Freestyle Friday  all                          caissa    k 568: rho +0.037 [-0.040, +0.119]; expected if full transfer 0.38
+  Masters OTB       all                          stockfish k  23: rho +0.142 [-0.267, +0.508]; expected if full transfer 0.33
+  Masters OTB       all                          caissa    k  23: rho +0.050 [-0.345, +0.432]; expected if full transfer 0.31
+  Lichess blitz     1200-1499                    stockfish k 960: rho -0.040 [-0.107, +0.028]; expected if full transfer 0.40
+  Lichess blitz     1200-1499                    caissa    k 960: rho -0.040 [-0.104, +0.020]; expected if full transfer 0.47
+  Lichess blitz     1500-1799                    stockfish k 960: rho +0.066 [+0.005, +0.128]; expected if full transfer 0.66
+  Lichess blitz     1500-1799                    caissa    k 960: rho +0.065 [+0.000, +0.127]; expected if full transfer 0.75
+  Lichess blitz     1800-1999                    stockfish k 960: rho +0.032 [-0.028, +0.100]; expected if full transfer 0.50
+  Lichess blitz     1800-1999                    caissa    k 960: rho +0.038 [-0.023, +0.100]; expected if full transfer 0.59
+  Lichess blitz     2000+                        stockfish k 960: rho -0.037 [-0.100, +0.027]; expected if full transfer 0.26
+  Lichess blitz     2000+                        caissa    k 960: rho -0.004 [-0.065, +0.058]; expected if full transfer 0.31
+  Lichess rapid     1200-1499                    stockfish k 960: rho +0.002 [-0.064, +0.067]; expected if full transfer 0.36
+  Lichess rapid     1200-1499                    caissa    k 960: rho -0.046 [-0.110, +0.020]; expected if full transfer 0.42
+  Lichess rapid     1500-1799                    stockfish k 960: rho +0.020 [-0.045, +0.085]; expected if full transfer 0.49
+  Lichess rapid     1500-1799                    caissa    k 960: rho +0.027 [-0.033, +0.091]; expected if full transfer 0.57
+  Lichess rapid     1800-1999                    stockfish k 960: rho +0.016 [-0.047, +0.081]; expected if full transfer 0.21
+  Lichess rapid     1800-1999                    caissa    k 960: rho +0.034 [-0.031, +0.099]; expected if full transfer 0.25
+  Freestyle Friday  lower third (1058-2043)      stockfish k 489: rho +0.092 [-0.002, +0.183]; expected if full transfer 0.14
+  Freestyle Friday  lower third (1058-2043)      caissa    k 489: rho +0.084 [-0.001, +0.164]; expected if full transfer 0.18
+  Freestyle Friday  middle third (2044-2341)     stockfish k 568: rho +0.013 [-0.066, +0.089]; expected if full transfer 0.18
+  Freestyle Friday  middle third (2044-2341)     caissa    k 568: rho +0.044 [-0.038, +0.126]; expected if full transfer 0.22
+  Freestyle Friday  upper third (2342-2934)      stockfish k 556: rho +0.045 [-0.036, +0.127]; expected if full transfer 0.17
+  Freestyle Friday  upper third (2342-2934)      caissa    k 556: rho +0.007 [-0.079, +0.092]; expected if full transfer 0.21

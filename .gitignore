@@ -21,6 +21,7 @@ results/*
 !results/masters960/
 !results/compare_levels/
 !results/chesscom960/
+!results/compare_human/
 logs/
 data/lichess/
 data/masters/
