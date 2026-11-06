@@ -98,6 +98,22 @@ RC_PARAMS = {
     "pdf.fonttype": 42,   # embed TrueType, so text stays editable in the PDF
 }
 
+@dataclass(frozen=True)
+class DatasetStyle:
+    label: str
+    colour: str
+    marker: str
+    filled: bool
+
+
+# Human-play datasets (Part III): colours distinct from the engine palette.
+DATASETS: dict[str, DatasetStyle] = {
+    "lichess_blitz": DatasetStyle("Lichess Blitz", "#6b4c9a", "o", True),
+    "lichess_rapid": DatasetStyle("Lichess Rapid", "#2a8c8c", "o", True),
+    "freestyle_friday": DatasetStyle("Freestyle Friday", "#555555", "s", True),
+    "masters": DatasetStyle("Masters OTB", "#555555", "D", False),
+}
+
 # Shading for the practically balanced band, and secondary text.
 BAND_COLOUR = "#d9d9d9"
 MUTED_TEXT = "#555555"

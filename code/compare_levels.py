@@ -46,7 +46,7 @@ from scipy import stats
 
 from analyse_selfplay import (H, N_DRAWS, PRIOR, TERNARY_POSITIONS, balanced_strip, draw_rate_lines,
                               hpd_levels, interval, posterior_draws, rng_for, to_xy)
-from plot_style import BAND_COLOUR, ENGINES, METRICS, MUTED_TEXT, apply_style, bold_tick_labels
+from plot_style import BAND_COLOUR, DATASETS, ENGINES, METRICS, MUTED_TEXT, apply_style, bold_tick_labels
 from utils import REPO_ROOT, STANDARD_POSITION_ID, get_position, setup_logging
 
 log = logging.getLogger("compare_levels")
@@ -62,10 +62,10 @@ N_BOOT = 2000
 
 # Source key -> label, colour, marker, filled
 SOURCES = {
-    "lichess_blitz": ("Lichess blitz", "#111111", "o", True),
-    "lichess_rapid": ("Lichess rapid", "#8c8c8c", "o", True),
-    "caissa": ("Caissa self-play", ENGINES["caissa"].colour, ENGINES["caissa"].marker, True),
-    "stockfish": ("Stockfish self-play", ENGINES["stockfish"].colour, ENGINES["stockfish"].marker, True),
+    "lichess_blitz": (DATASETS["lichess_blitz"].label, DATASETS["lichess_blitz"].colour, "o", True),
+    "lichess_rapid": (DATASETS["lichess_rapid"].label, DATASETS["lichess_rapid"].colour, "o", True),
+    "caissa": ("Caissa Self-Play", ENGINES["caissa"].colour, ENGINES["caissa"].marker, True),
+    "stockfish": ("Stockfish Self-Play", ENGINES["stockfish"].colour, ENGINES["stockfish"].marker, True),
 }
 ENGINE_SOURCES = ("stockfish", "caissa")
 HUMAN_SOURCES = ("lichess_blitz", "lichess_rapid")
@@ -267,6 +267,22 @@ def fig_ternary(post: pd.DataFrame, out_dir: Path) -> list[Path]:
         ax.scatter(px, py, s=60, marker=marker, facecolor=colour if filled else "white",
                    edgecolor="#111111" if filled else colour, lw=1.0, zorder=4)
     triangle(ax)
+    # The region shown in the panels below (strip_panel's default window).
+    from matplotlib.patches import Rectangle
+    ax.add_patch(Rectangle((0.3, 0.0), 0.45, H * 0.98, fill=False, edgecolor="#111111", lw=0.9,
+                           ls=(0, (1, 2)), zorder=6))
+    # Key: source colours, then what the small and large markers mean.
+    from matplotlib.lines import Line2D
+    handles = [Line2D([], [], ls="none", marker=SOURCES[s][2], ms=6, mfc=SOURCES[s][1],
+                      mec="#111111", mew=0.8, label=SOURCES[s][0])
+               for s in SOURCES if not post[post.source == s].empty]
+    handles += [Line2D([], [], ls="none", label=""),
+                Line2D([], [], ls="none", marker="o", ms=2.5, mfc="#888888", mec="none",
+                       label="Each position"),
+                Line2D([], [], ls="none", marker="o", ms=7, mfc="#888888", mec="#111111", mew=0.8,
+                       label="Pooled")]
+    fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.03, 0.985), frameon=False,
+               handletextpad=0.3, labelspacing=0.45)
     ax.set_xlim(-0.14, 1.14)
     ax.set_ylim(-0.12, H + 0.09)
     ax.set_aspect("equal")

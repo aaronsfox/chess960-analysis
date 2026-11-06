@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from plot_style import BAND_COLOUR, ENGINES, METRICS, MUTED_TEXT, apply_style, bold_tick_labels
+from plot_style import BAND_COLOUR, DATASETS, ENGINES, METRICS, MUTED_TEXT, apply_style, bold_tick_labels
 from utils import REPO_ROOT, STANDARD_POSITION_ID
 
 CMP = REPO_ROOT / "results" / "compare_human"
@@ -33,13 +33,9 @@ CC_POS = REPO_ROOT / "results" / "chesscom960" / "analysis" / "chesscom960_posit
 MA_POS = REPO_ROOT / "results" / "masters960" / "masters960_positions.csv"
 SELFPLAY = REPO_ROOT / "results" / "selfplay" / "analysis" / "selfplay_posteriors.csv"
 
-# Dataset styles: human datasets in greys with distinct markers; engines in their colours.
-STYLE = {
-    "lichess_blitz": dict(label="Lichess blitz", color="#111111", marker="o", mfc="#111111"),
-    "lichess_rapid": dict(label="Lichess rapid", color="#111111", marker="o", mfc="white"),
-    "freestyle_friday": dict(label="Freestyle Friday", color="#555555", marker="s", mfc="#555555"),
-    "masters": dict(label="Masters OTB", color="#555555", marker="D", mfc="white"),
-}
+# Dataset styles (colours, markers and labels from plot_style.DATASETS).
+STYLE = {k: dict(label=v.label, color=v.colour, marker=v.marker, mfc=v.colour if v.filled else "white")
+         for k, v in DATASETS.items()}
 DELTA = METRICS["delta_elo"].bold_symbol
 
 
@@ -58,7 +54,10 @@ def save(fig, name: str) -> list[Path]:
 # ---------------------------------------------------------------------------
 
 GROUP_LABELS = {"all": "All", "lower third": "Lower", "middle third": "Middle", "upper third": "Upper",
-                "classical": "Classical", "rapid": "Rapid", "2600+": "2600+"}
+                "classical": "Classical", "rapid": "Rapid", "2600+": "2600+ Rating"}
+# What each block's x-ticks are, printed under the dataset name.
+BLOCK_SUBTITLES = {"lichess_blitz": "Mean Rating", "lichess_rapid": "Mean Rating",
+                   "freestyle_friday": "Rating Tertile", "masters": "Time Control / Rating"}
 
 
 def fig_levels() -> list[Path]:
@@ -94,7 +93,7 @@ def fig_levels() -> list[Path]:
         a = g[(g.dataset == ds) & (g.group == "all")].iloc[0]
         for ax, val in zip(axes, (a.advantage_elo, 100 * a.decisive_adj)):
             ax.hlines(val, start - 0.4, x - 0.6, color=st["color"], lw=0.9, ls=(0, (4, 2)), zorder=2)
-        block_mid.append(((start + x - 1) / 2, st["label"]))
+        block_mid.append(((start + x - 1) / 2, f"{st['label']}\n({BLOCK_SUBTITLES[ds]})"))
         x += 0.8
     for e in ("stockfish", "caissa"):
         r = g[g.dataset == f"{e}_selfplay"].iloc[0]
@@ -104,7 +103,7 @@ def fig_levels() -> list[Path]:
         ticks.append(x)
         tick_labels.append(es.label)
         x += 1
-    block_mid.append((x - 1.5, "Engine self-play"))
+    block_mid.append((x - 1.5, "Engine Self-Play"))
     axes[0].axhline(0, color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=0)
     axes[0].set_ylabel(f"White Advantage {DELTA}")
     axes[1].set_ylabel("Decisive at Equal Ratings (%)")
@@ -131,32 +130,85 @@ def positions() -> dict[str, pd.DataFrame]:
     return {k: v[v.human_elo.notna()].copy() for k, v in out.items()}
 
 
+MAIN_YLIM = (-130, 160)          # shared range for every panel
+FF_TOP = (160, 300)              # Freestyle Friday broken-axis segments beyond it
+FF_BOTTOM = (-260, -130)
+SEG_RATIO = 0.22                 # height of each outer segment relative to the main one
+HSPACE = 0.06
+
+
+def ranked_panel(ax, g: pd.DataFrame, k: str, pooled: float) -> None:
+    rank = np.arange(1, len(g) + 1)
+    st = STYLE[k]
+    ax.vlines(rank, g.human_lo, g.human_hi, color=st["color"], alpha=0.22, lw=0.5, zorder=1)
+    ax.plot(rank, g.human_elo, color=st["color"], lw=1.3, zorder=2)
+    ax.axhline(pooled, color="#111111", lw=0.8, ls=(0, (4, 2)), zorder=3)
+    ax.axhline(0, color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=0)
+    hit = g.index[g.position_id == STANDARD_POSITION_ID]
+    if len(hit):
+        i = int(hit[0])
+        ax.vlines(i + 1, g.loc[i, "human_lo"], g.loc[i, "human_hi"], color="#111111", lw=1.3, zorder=4)
+        ax.plot(i + 1, g.loc[i, "human_elo"], "o", color="#111111", ms=4, zorder=5)
+    ax.set_xlim(0, len(g) + 1)
+
+
+def break_marks(ax_upper, ax_lower) -> None:
+    """Diagonal marks on the facing edges of two segments of a broken axis."""
+    kw = dict(color="#111111", clip_on=False, lw=0.8)
+    for ax, y in ((ax_upper, 0), (ax_lower, 1)):
+        h = 0.02 / ax.get_position().height        # same visual size on segments of any height
+        ax.plot((-0.03, 0.03), (y - h, y + h), transform=ax.transAxes, **kw)
+
+
 def fig_ranked() -> list[Path]:
+    """Lichess panels span the full height with a y-range chosen so their
+    scale matches the Freestyle Friday main segment; Freestyle Friday has
+    compressed segments above and below (broken axis) so its widest CIs are
+    not clipped."""
     plt = apply_style()
     pos = positions()
     het = pd.read_csv(CMP / "positions_heterogeneity.csv").set_index("dataset")
-    fig, axes = plt.subplots(1, 3, figsize=(7.0, 3.0), sharey=True, gridspec_kw={"wspace": 0.08,
-                             "width_ratios": [960, 960, 568]})
-    for ax, (k, p) in zip(axes, pos.items()):
-        g = p.sort_values("human_elo", ascending=False).reset_index(drop=True)
-        rank = np.arange(1, len(g) + 1)
-        st = STYLE[k]
-        ax.vlines(rank, g.human_lo, g.human_hi, color="#9a9a9a", alpha=0.35, lw=0.5, zorder=1)
-        ax.plot(rank, g.human_elo, color="#111111", lw=1.3, zorder=2)
-        ax.axhline(het.loc[k, "pooled"], color="#111111", lw=0.8, ls=(0, (4, 2)), zorder=3)
-        ax.axhline(0, color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=0)
-        hit = g.index[g.position_id == STANDARD_POSITION_ID]
-        if len(hit):
-            i = int(hit[0])
-            ax.vlines(i + 1, g.loc[i, "human_lo"], g.loc[i, "human_hi"], color=ENGINES["caissa"].colour,
-                      lw=1.3, zorder=4)
-            ax.plot(i + 1, g.loc[i, "human_elo"], "o", color=ENGINES["caissa"].colour, ms=4, zorder=5)
-        ax.set_xlim(0, len(g) + 1)
-        ax.set_title(st["label"], fontsize=9, fontweight="bold")
+    fig = plt.figure(figsize=(7.0, 3.6))
+    hr = [SEG_RATIO, 1.0, SEG_RATIO]
+    gs = fig.add_gridspec(3, 3, height_ratios=hr, hspace=HSPACE, wspace=0.12,
+                          width_ratios=[960, 960, 568])
+    # Lichess y-range spanning the same height at the main-segment scale.
+    per_unit = (MAIN_YLIM[1] - MAIN_YLIM[0]) / hr[1]
+    gap = HSPACE * np.mean(hr)
+    extra = (SEG_RATIO + gap) * per_unit
+    li_ylim = (MAIN_YLIM[0] - extra, MAIN_YLIM[1] + extra)
+    axes = []
+    for j, k in enumerate(["lichess_blitz", "lichess_rapid"]):
+        ax = fig.add_subplot(gs[:, j], sharey=axes[0] if axes else None)
+        g = pos[k].sort_values("human_elo", ascending=False).reset_index(drop=True)
+        ranked_panel(ax, g, k, het.loc[k, "pooled"])
+        ax.set_ylim(*li_ylim)
+        ax.set_yticks(np.arange(-100, MAIN_YLIM[1] + 1, 50))   # ticks only within the shared range
+        ax.set_title(STYLE[k]["label"], fontsize=9, fontweight="bold")
         ax.set_xlabel("Position Rankings")
+        if j:
+            ax.tick_params(labelleft=False)
         bold_tick_labels(ax)
+        axes.append(ax)
     axes[0].set_ylabel(f"White Advantage {DELTA}")
-    axes[0].set_ylim(-150, 175)
+    k = "freestyle_friday"
+    g = pos[k].sort_values("human_elo", ascending=False).reset_index(drop=True)
+    top, mid, bot = (fig.add_subplot(gs[r, 2]) for r in range(3))
+    for ax, lim in ((top, FF_TOP), (mid, MAIN_YLIM), (bot, FF_BOTTOM)):
+        ranked_panel(ax, g, k, het.loc[k, "pooled"])
+        ax.set_ylim(*lim)
+        bold_tick_labels(ax)
+    for ax in (top, mid):
+        ax.spines["bottom"].set_visible(False)
+        ax.tick_params(bottom=False, labelbottom=False)
+    for ax in (mid, bot):
+        ax.spines["top"].set_visible(False)
+    top.set_yticks([200, 300])
+    bot.set_yticks([-250, -150])
+    break_marks(top, mid)
+    break_marks(mid, bot)
+    top.set_title(STYLE[k]["label"], fontsize=9, fontweight="bold")
+    bot.set_xlabel("Position Rankings")
     return save(fig, "human_positions_ranked")
 
 
@@ -195,31 +247,28 @@ def fig_vs_selfplay(engine: str = "stockfish") -> list[Path]:
     lim = (-30, 130)
     for ax, (k, p) in zip(axes.ravel(), pos.items()):
         x = x_all.reindex(p.position_id).to_numpy()
-        y, se = p.human_elo.to_numpy(), p.human_se.to_numpy()
-        ax.plot(lim, lim, color=MUTED_TEXT, lw=0.8, ls=(0, (1, 2)), zorder=1)
+        y = p.human_elo.to_numpy()
+        st = STYLE[k]
         ax.axhline(0, color=BAND_COLOUR, lw=0.8, zorder=0)
-        if k == "masters":
-            ax.errorbar(x, y, yerr=[y - p.human_lo, p.human_hi - y], fmt="D", ms=3.5, color="#555555",
-                        mfc="white", elinewidth=0.7, capsize=0, zorder=3)
-        else:
-            ax.scatter(x, y, s=4, color="#222222", alpha=0.25, lw=0, zorder=2)
-            dc = deciles(x, y, se)
-            es = ENGINES[engine]
-            ax.errorbar(dc.x, dc.y, yerr=[dc.y - dc.lo, dc.hi - dc.y], fmt=es.marker, ms=4, color=es.colour,
-                        mec="white", mew=0.6, elinewidth=1.0, capsize=0, zorder=4)
+        few = len(p) < 100
+        ax.scatter(x, y, s=14 if few else 4, marker=st["marker"], color=st["color"],
+                   alpha=0.8 if few else 0.3, lw=0, zorder=2)
+        b1, b0 = np.polyfit(x, y, 1)          # least-squares line through the points
+        gx = np.array(lim)
+        ax.plot(gx, b0 + b1 * gx, color="#111111", lw=1.1, ls=(0, (4, 2)), zorder=3)
         r = tr.loc[k]
-        ax.text(0.04, 0.96, f"ρ = {r.rho:.2f} [{r.rho_lo:.2f}, {r.rho_hi:.2f}]\n"
-                f"Full transfer ρ = {r.rho_if_full_transfer:.2f}",
+        ax.text(0.04, 0.96, f"\u03c1 = {r.rho:.2f} [{r.rho_lo:.2f}, {r.rho_hi:.2f}]\n"
+                f"Expected Transfer \u03c1 = {r.rho_if_full_transfer:.2f}",
                 transform=ax.transAxes, ha="left", va="top", fontsize=7.5, fontweight="bold", zorder=6,
                 bbox=dict(facecolor="white", edgecolor="none", pad=1.5, alpha=0.9))
-        ax.set_title(STYLE[k]["label"], fontsize=9, fontweight="bold")
+        ax.set_title(st["label"], fontsize=9, fontweight="bold")
         ax.set_xlim(*lim)
         ax.set_ylim(-110, 150)
         ax.xaxis.set_major_locator(MultipleLocator(25))
         ax.yaxis.set_major_locator(MultipleLocator(50))
         bold_tick_labels(ax)
     for ax in axes[1]:
-        ax.set_xlabel(f"{ENGINES[engine].label} Self-play {DELTA}")
+        ax.set_xlabel(f"{ENGINES[engine].label} Self-Play {DELTA}")
     for ax in axes[:, 0]:
         ax.set_ylabel(f"Human Play {DELTA}")
     return save(fig, f"human_vs_selfplay_{engine}")
