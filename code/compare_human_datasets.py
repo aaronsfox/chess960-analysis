@@ -22,6 +22,16 @@ Chess.com Freestyle Friday, master-level over-the-board games.
    expected under full transfer: each position's human value simulated as
    its engine value plus noise with that position's SE.
 
+4. Subgroups for the balance and decisiveness analyses, all from models
+   without engine terms: White's advantage and the decisive rate at equal
+   ratings per dataset and subgroup (Lichess rating bands, Freestyle Friday
+   rating thirds, master time controls and 2600+), the Lichess mean-rating
+   trend (K*delta per 100 rating points), and engine self-play pooled over
+   all 960 positions.
+5. Decisive rate by position: Spearman rho between per-position decisive
+   rates at equal ratings (Lichess, Freestyle Friday) and self-play
+   per-position decisive rates (posterior means), bootstrap 95% CIs.
+
 Outputs in results/compare_human/.
 
     python code/compare_human_datasets.py
@@ -39,7 +49,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from analyse_lichess960 import BAND_LABELS, band_of, rating_model, stage1
+from analyse_lichess960 import (BAND_LABELS, K, RATING_CENTRE, band_of, decisive_model, frac_logit,
+                                rating_model, rating_x, stage1)
 from utils import REPO_ROOT, setup_logging
 
 log = logging.getLogger("compare_human_datasets")
@@ -257,8 +268,93 @@ def transfer(pos: dict[str, pd.DataFrame], eng: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# 4. Balance and decisiveness by dataset and subgroup (no engine terms)
+# ---------------------------------------------------------------------------
 
-def summary_text(bal, pairs, q_bal, het, betw, trans) -> str:
+def group_row(dataset: str, group: str, d: pd.DataFrame) -> dict:
+    rm = rating_model(d)
+    s = d.score_white.to_numpy(float)
+    gap = np.abs(d.white_elo.to_numpy(float) - d.black_elo.to_numpy(float))
+    dm = decisive_model(gap, (s != 0.5).astype(float), cluster=d.position_id.to_numpy())
+    mean_r = (d.white_elo.astype(float) + d.black_elo.astype(float)) / 2
+    return {"dataset": dataset, "group": group, "games": len(d),
+            "rating_range": f"{mean_r.min():.0f}-{mean_r.max():.0f}",
+            "advantage_elo": rm["advantage_elo"], "advantage_lo": rm["advantage_lo"],
+            "advantage_hi": rm["advantage_hi"], "beta": rm["beta"],
+            "decisive_raw": float((s != 0.5).mean()), "decisive_adj": dm["decisive_adj"],
+            "decisive_adj_lo": dm["decisive_adj_lo"], "decisive_adj_hi": dm["decisive_adj_hi"]}
+
+
+def mean_rating_trend(d: pd.DataFrame) -> dict:
+    """Change in White's advantage (Delta_Elo) per 100 points of mean rating:
+    logit E[s] = alpha + beta (ln10/400) D + delta (M - 1750)/100."""
+    mc = ((d.white_elo.to_numpy(float) + d.black_elo.to_numpy(float)) / 2 - RATING_CENTRE) / 100
+    X = np.column_stack([np.ones(len(d)), rating_x(d), mc])
+    b, V = frac_logit(X, d.score_white.to_numpy(float), cluster=d.position_id.to_numpy())
+    se = np.sqrt(np.diag(V))
+    return {"advantage_at_1750": K * b[0], "delta_elo_per_100": K * b[2],
+            "delta_lo": K * (b[2] - 1.96 * se[2]), "delta_hi": K * (b[2] + 1.96 * se[2]),
+            "p": float(2 * stats.norm.sf(abs(b[2] / se[2])))}
+
+
+def groups() -> tuple[pd.DataFrame, pd.DataFrame]:
+    rows, trends = [], []
+    for s in ("blitz", "rapid"):
+        path = LICHESS / "prepared" / f"lichess960_{s}.parquet"
+        if not path.exists():
+            continue
+        d = pd.read_parquet(path)
+        rows.append(group_row(f"lichess_{s}", "all", d))
+        band = band_of((d.white_elo.astype(float) + d.black_elo.astype(float)) / 2)
+        for lab in BAND_LABELS:
+            sub = d[(band == lab).to_numpy()]
+            if len(sub) >= 1000:
+                rows.append(group_row(f"lichess_{s}", lab, sub))
+        trends.append({"dataset": f"lichess_{s}", **mean_rating_trend(d)})
+    from analyse_chesscom960 import include
+    d, _ = include(pd.read_parquet(CHESSCOM / "chesscom960_games.parquet"))
+    rows.append(group_row("freestyle_friday", "all", d))
+    mean_r = (d.white_elo + d.black_elo) / 2
+    thirds = pd.qcut(mean_r, 3, labels=["lower third", "middle third", "upper third"])
+    for t in thirds.cat.categories:
+        rows.append(group_row("freestyle_friday", t, d[(thirds == t).to_numpy()]))
+    ma = pd.read_csv(MASTERS / "masters960_pooled.csv")
+    for _, r in ma[ma.group.isin(["all", "time control"]) | (ma.level == "2600+")].iterrows():
+        rows.append({"dataset": "masters", "group": r.level, "games": int(r.games),
+                     "advantage_elo": r.advantage_elo, "advantage_lo": r.advantage_lo,
+                     "advantage_hi": r.advantage_hi, "beta": 1.0,
+                     "decisive_raw": 1 - r.draws, "decisive_adj": r.decisive_adj,
+                     "decisive_adj_lo": r.decisive_adj_lo, "decisive_adj_hi": r.decisive_adj_hi})
+    sp = pd.read_csv(SELFPLAY)
+    for e, g in sp.groupby("engine"):
+        n = g.games.sum()
+        e_score = (g.white_wins.sum() + 0.5 * g.draws.sum()) / n
+        rows.append({"dataset": f"{e}_selfplay", "group": "all 960 positions", "games": int(n),
+                     "advantage_elo": 400 * np.log10(e_score / (1 - e_score)),
+                     "decisive_raw": 1 - g.draws.sum() / n, "decisive_adj": 1 - g.draws.sum() / n})
+    return pd.DataFrame(rows), pd.DataFrame(trends)
+
+
+def decisive_spearman() -> pd.DataFrame:
+    sp = pd.read_csv(SELFPLAY).set_index(["engine", "position_id"])
+    li = pd.read_csv(LICHESS / "analysis" / "lichess960_positions.csv")
+    cc = pd.read_csv(CHESSCOM / "analysis" / "chesscom960_positions.csv")
+    sets = {"lichess_blitz": li[li.set == "blitz"], "lichess_rapid": li[li.set == "rapid"],
+            "freestyle_friday": cc[cc.games >= MIN_CASE]}
+    rows = []
+    for k, p in sets.items():
+        p = p[p.decisive_adj.notna()]
+        for e in ENGINES:
+            x = sp.loc[e].reindex(p.position_id).decisive_mean.to_numpy()
+            rho = spearman_boot(x, p.decisive_adj.to_numpy(), seed("decisive", k, e))
+            rows.append({"dataset": k, "engine": e, "positions": len(p),
+                         "rho": rho[0], "rho_lo": rho[1], "rho_hi": rho[2]})
+    return pd.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+
+def summary_text(bal, pairs, q_bal, het, betw, trans, grp=None, trend=None, dec=None) -> str:
     lab = lambda k: DATASET_LABELS.get(k, k)
     L = ["Comparisons across human-play datasets", "=" * 38, "",
          "1. White's advantage at equal ratings (Delta_Elo [95% CI])"]
@@ -283,6 +379,23 @@ def summary_text(bal, pairs, q_bal, het, betw, trans) -> str:
     for r in trans.itertuples():
         L.append(f"  {lab(r.dataset):<17} {r.group:<28} {r.engine:<9} k {r.positions:>3}: rho {r.rho:+.3f} "
                  f"[{r.rho_lo:+.3f}, {r.rho_hi:+.3f}]; expected if full transfer {r.rho_if_full_transfer:.2f}")
+    if grp is not None:
+        L += ["", "4. By dataset and subgroup (models without engine terms): White's advantage and decisive "
+              "rate at equal ratings"]
+        for r in grp.itertuples():
+            adv = (f"{r.advantage_elo:+6.1f} [{r.advantage_lo:+.1f}, {r.advantage_hi:+.1f}]"
+                   if pd.notna(getattr(r, "advantage_lo", np.nan)) else f"{r.advantage_elo:+6.1f}")
+            dec_ = (f"{100 * r.decisive_adj:.1f}%" + (f" [{100 * r.decisive_adj_lo:.1f}, {100 * r.decisive_adj_hi:.1f}]"
+                    if pd.notna(getattr(r, "decisive_adj_lo", np.nan)) else "")) if pd.notna(r.decisive_adj) else "n/a"
+            L.append(f"  {lab(r.dataset):<20} {r.group:<18} n {r.games:>9,}: advantage {adv}; decisive {dec_}")
+        for r in trend.itertuples():
+            L.append(f"  {lab(r.dataset)}: change in White's advantage per 100 rating points "
+                     f"{r.delta_elo_per_100:+.2f} [{r.delta_lo:+.2f}, {r.delta_hi:+.2f}] Elo (p {r.p:.3g})")
+    if dec is not None:
+        L += ["", "5. Decisive rate by position vs engine self-play (Spearman rho)"]
+        for r in dec.itertuples():
+            L.append(f"  {lab(r.dataset):<17} {r.engine:<9} k {r.positions}: rho {r.rho:+.3f} "
+                     f"[{r.rho_lo:+.3f}, {r.rho_hi:+.3f}]")
     return "\n".join(L) + "\n"
 
 
@@ -299,13 +412,18 @@ def main(argv: list[str] | None = None) -> int:
     het = heterogeneity(pos)
     betw = between_datasets(pos, eng)
     trans = transfer(pos, eng)
+    grp, trend = groups()
+    dec = decisive_spearman()
+    grp.to_csv(OUT / "groups_balance_decisive.csv", index=False)
+    trend.to_csv(OUT / "lichess_mean_rating_trend.csv", index=False)
+    dec.to_csv(OUT / "decisive_spearman.csv", index=False)
     bal.to_csv(OUT / "balance_by_dataset.csv", index=False)
     pairs.to_csv(OUT / "balance_pairwise.csv", index=False)
     pd.DataFrame([q_bal]).to_csv(OUT / "balance_heterogeneity.csv", index=False)
     het.to_csv(OUT / "positions_heterogeneity.csv", index=False)
     betw.to_csv(OUT / "positions_between_datasets.csv", index=False)
     trans.to_csv(OUT / "transfer_spearman.csv", index=False)
-    text = summary_text(bal, pairs, q_bal, het, betw, trans)
+    text = summary_text(bal, pairs, q_bal, het, betw, trans, grp, trend, dec)
     (OUT / "compare_human_summary.txt").write_text(text)
     print(text)
     return 0

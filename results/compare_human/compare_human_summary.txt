@@ -58,3 +58,36 @@ Comparisons across human-play datasets
   Freestyle Friday  middle third (2044-2341)     caissa    k 568: rho +0.044 [-0.038, +0.126]; expected if full transfer 0.22
   Freestyle Friday  upper third (2342-2934)      stockfish k 556: rho +0.045 [-0.036, +0.127]; expected if full transfer 0.17
   Freestyle Friday  upper third (2342-2934)      caissa    k 556: rho +0.007 [-0.079, +0.092]; expected if full transfer 0.21
+
+4. By dataset and subgroup (models without engine terms): White's advantage and decisive rate at equal ratings
+  Lichess blitz        all                n 1,286,150: advantage  +10.5 [+9.8, +11.1]; decisive 94.2% [94.1, 94.2]
+  Lichess blitz        1200-1499          n   166,868: advantage   +6.9 [+5.2, +8.7]; decisive 92.6% [92.4, 92.9]
+  Lichess blitz        1500-1799          n   745,936: advantage  +10.1 [+9.2, +10.9]; decisive 94.6% [94.5, 94.7]
+  Lichess blitz        1800-1999          n   308,893: advantage  +12.5 [+11.1, +13.8]; decisive 93.2% [93.0, 93.4]
+  Lichess blitz        2000+              n    64,453: advantage  +15.5 [+12.5, +18.6]; decisive 90.7% [90.1, 91.3]
+  Lichess rapid        all                n   423,308: advantage   +9.7 [+8.6, +10.8]; decisive 91.7% [91.5, 91.9]
+  Lichess rapid        1200-1499          n   123,934: advantage   +8.1 [+6.1, +10.2]; decisive 92.1% [91.7, 92.4]
+  Lichess rapid        1500-1799          n   260,645: advantage   +9.8 [+8.4, +11.1]; decisive 91.6% [91.4, 91.8]
+  Lichess rapid        1800-1999          n    35,404: advantage  +14.4 [+10.6, +18.2]; decisive 89.8% [89.0, 90.5]
+  Lichess rapid        2000+              n     3,325: advantage   +7.5 [-5.1, +20.2]; decisive 81.8% [78.3, 84.8]
+  Freestyle Friday     all                n    51,386: advantage  +13.8 [+10.8, +16.9]; decisive 89.0% [88.1, 89.8]
+  Freestyle Friday     lower third        n    17,143: advantage  +13.0 [+7.9, +18.0]; decisive 93.9% [92.8, 94.9]
+  Freestyle Friday     middle third       n    17,133: advantage  +11.7 [+6.1, +17.3]; decisive 92.7% [91.6, 93.7]
+  Freestyle Friday     upper third        n    17,110: advantage  +17.3 [+12.0, +22.5]; decisive 83.8% [82.1, 85.4]
+  Masters OTB          all                n     2,208: advantage  +14.6 [+1.8, +27.4]; decisive 63.1% [58.8, 67.2]
+  Masters OTB          classical          n     1,315: advantage  +12.0 [-5.4, +29.5]; decisive 49.7% [39.0, 60.5]
+  Masters OTB          rapid              n       761: advantage  +20.2 [-1.8, +42.2]; decisive 64.7% [57.4, 71.3]
+  Masters OTB          blitz              n       132: advantage   +0.0 [-59.6, +59.6]; decisive n/a
+  Masters OTB          2600+              n     1,194: advantage  +20.6 [+4.4, +36.7]; decisive 64.5% [59.3, 69.3]
+  caissa_selfplay      all 960 positions  n   480,000: advantage  +26.3; decisive 17.4%
+  stockfish_selfplay   all 960 positions  n   480,000: advantage  +19.4; decisive 9.6%
+  Lichess blitz: change in White's advantage per 100 rating points +1.29 [+0.93, +1.64] Elo (p 1.64e-12)
+  Lichess rapid: change in White's advantage per 100 rating points +1.37 [+0.70, +2.04] Elo (p 6.35e-05)
+
+5. Decisive rate by position vs engine self-play (Spearman rho)
+  Lichess blitz     stockfish k 960: rho +0.221 [+0.157, +0.281]
+  Lichess blitz     caissa    k 960: rho +0.196 [+0.130, +0.256]
+  Lichess rapid     stockfish k 960: rho +0.153 [+0.091, +0.216]
+  Lichess rapid     caissa    k 960: rho +0.167 [+0.106, +0.230]
+  Freestyle Friday  stockfish k 560: rho +0.073 [-0.012, +0.154]
+  Freestyle Friday  caissa    k 560: rho +0.153 [+0.071, +0.235]
