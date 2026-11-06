@@ -130,13 +130,6 @@ def positions() -> dict[str, pd.DataFrame]:
     return {k: v[v.human_elo.notna()].copy() for k, v in out.items()}
 
 
-MAIN_YLIM = (-130, 160)          # shared range for every panel
-FF_TOP = (160, 300)              # Freestyle Friday broken-axis segments beyond it
-FF_BOTTOM = (-260, -130)
-SEG_RATIO = 0.22                 # height of each outer segment relative to the main one
-HSPACE = 0.06
-
-
 def ranked_panel(ax, g: pd.DataFrame, k: str, pooled: float) -> None:
     rank = np.arange(1, len(g) + 1)
     st = STYLE[k]
@@ -152,63 +145,20 @@ def ranked_panel(ax, g: pd.DataFrame, k: str, pooled: float) -> None:
     ax.set_xlim(0, len(g) + 1)
 
 
-def break_marks(ax_upper, ax_lower) -> None:
-    """Diagonal marks on the facing edges of two segments of a broken axis."""
-    kw = dict(color="#111111", clip_on=False, lw=0.8)
-    for ax, y in ((ax_upper, 0), (ax_lower, 1)):
-        h = 0.02 / ax.get_position().height        # same visual size on segments of any height
-        ax.plot((-0.03, 0.03), (y - h, y + h), transform=ax.transAxes, **kw)
-
-
 def fig_ranked() -> list[Path]:
-    """Lichess panels span the full height with a y-range chosen so their
-    scale matches the Freestyle Friday main segment; Freestyle Friday has
-    compressed segments above and below (broken axis) so its widest CIs are
-    not clipped."""
     plt = apply_style()
     pos = positions()
     het = pd.read_csv(CMP / "positions_heterogeneity.csv").set_index("dataset")
-    fig = plt.figure(figsize=(7.0, 3.6))
-    hr = [SEG_RATIO, 1.0, SEG_RATIO]
-    gs = fig.add_gridspec(3, 3, height_ratios=hr, hspace=HSPACE, wspace=0.12,
-                          width_ratios=[960, 960, 568])
-    # Lichess y-range spanning the same height at the main-segment scale.
-    per_unit = (MAIN_YLIM[1] - MAIN_YLIM[0]) / hr[1]
-    gap = HSPACE * np.mean(hr)
-    extra = (SEG_RATIO + gap) * per_unit
-    li_ylim = (MAIN_YLIM[0] - extra, MAIN_YLIM[1] + extra)
-    axes = []
-    for j, k in enumerate(["lichess_blitz", "lichess_rapid"]):
-        ax = fig.add_subplot(gs[:, j], sharey=axes[0] if axes else None)
-        g = pos[k].sort_values("human_elo", ascending=False).reset_index(drop=True)
+    fig, axes = plt.subplots(1, 3, figsize=(7.0, 3.0), sharey=True, gridspec_kw={"wspace": 0.08,
+                             "width_ratios": [960, 960, 568]})
+    for ax, (k, p) in zip(axes, pos.items()):
+        g = p.sort_values("human_elo", ascending=False).reset_index(drop=True)
         ranked_panel(ax, g, k, het.loc[k, "pooled"])
-        ax.set_ylim(*li_ylim)
-        ax.set_yticks(np.arange(-100, MAIN_YLIM[1] + 1, 50))   # ticks only within the shared range
         ax.set_title(STYLE[k]["label"], fontsize=9, fontweight="bold")
         ax.set_xlabel("Position Rankings")
-        if j:
-            ax.tick_params(labelleft=False)
         bold_tick_labels(ax)
-        axes.append(ax)
     axes[0].set_ylabel(f"White Advantage {DELTA}")
-    k = "freestyle_friday"
-    g = pos[k].sort_values("human_elo", ascending=False).reset_index(drop=True)
-    top, mid, bot = (fig.add_subplot(gs[r, 2]) for r in range(3))
-    for ax, lim in ((top, FF_TOP), (mid, MAIN_YLIM), (bot, FF_BOTTOM)):
-        ranked_panel(ax, g, k, het.loc[k, "pooled"])
-        ax.set_ylim(*lim)
-        bold_tick_labels(ax)
-    for ax in (top, mid):
-        ax.spines["bottom"].set_visible(False)
-        ax.tick_params(bottom=False, labelbottom=False)
-    for ax in (mid, bot):
-        ax.spines["top"].set_visible(False)
-    top.set_yticks([200, 300])
-    bot.set_yticks([-250, -150])
-    break_marks(top, mid)
-    break_marks(mid, bot)
-    top.set_title(STYLE[k]["label"], fontsize=9, fontweight="bold")
-    bot.set_xlabel("Position Rankings")
+    axes[0].set_ylim(-150, 175)
     return save(fig, "human_positions_ranked")
 
 
@@ -251,11 +201,11 @@ def fig_vs_selfplay(engine: str = "stockfish") -> list[Path]:
         st = STYLE[k]
         ax.axhline(0, color=BAND_COLOUR, lw=0.8, zorder=0)
         few = len(p) < 100
-        ax.scatter(x, y, s=14 if few else 4, marker=st["marker"], color=st["color"],
-                   alpha=0.8 if few else 0.3, lw=0, zorder=2)
+        ax.scatter(x, y, s=10 if few else 4, marker="o", color="#6e6e6e",
+                   alpha=0.8 if few else 0.35, lw=0, zorder=2)
         b1, b0 = np.polyfit(x, y, 1)          # least-squares line through the points
         gx = np.array(lim)
-        ax.plot(gx, b0 + b1 * gx, color="#111111", lw=1.1, ls=(0, (4, 2)), zorder=3)
+        ax.plot(gx, b0 + b1 * gx, color="#111111", lw=0.8, ls=(0, (1, 1.5)), zorder=3)
         r = tr.loc[k]
         ax.text(0.04, 0.96, f"\u03c1 = {r.rho:.2f} [{r.rho_lo:.2f}, {r.rho_hi:.2f}]\n"
                 f"Expected Transfer \u03c1 = {r.rho_if_full_transfer:.2f}",

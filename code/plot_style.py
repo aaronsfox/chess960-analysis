@@ -110,8 +110,8 @@ class DatasetStyle:
 DATASETS: dict[str, DatasetStyle] = {
     "lichess_blitz": DatasetStyle("Lichess Blitz", "#6b4c9a", "o", True),
     "lichess_rapid": DatasetStyle("Lichess Rapid", "#2a8c8c", "o", True),
-    "freestyle_friday": DatasetStyle("Freestyle Friday", "#555555", "s", True),
-    "masters": DatasetStyle("Masters OTB", "#555555", "D", False),
+    "freestyle_friday": DatasetStyle("Freestyle Friday", "#b5546b", "s", True),
+    "masters": DatasetStyle("Masters OTB", "#7d8a2e", "D", True),
 }
 
 # Shading for the practically balanced band, and secondary text.

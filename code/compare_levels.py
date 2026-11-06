@@ -240,53 +240,36 @@ def strip_panel(ax, post: pd.DataFrame, pos: int, sources, xlim=(0.3, 0.75), yla
     bold_tick_labels(ax)
 
 
-def fig_ternary(post: pd.DataFrame, out_dir: Path) -> list[Path]:
-    plt = apply_style()
-    fig = plt.figure(figsize=(7.0, 7.6))
-    gs = fig.add_gridspec(2, 4, height_ratios=[1.05, 1.0], hspace=0.12, wspace=0.08)
-    ax = fig.add_subplot(gs[0, :])
+def ternary_overview(ax, post: pd.DataFrame, human: str) -> None:
+    """Full triangle: each position's posterior mean for one Lichess set and both engines."""
     draw_rate_lines(ax)
     balanced_strip(ax)
-    for s in SOURCES:
+    for s in ("caissa", "stockfish", human):     # Stockfish on top, as in the zoomed panels
         g = post[post.source == s]
         if g.empty:
             continue
-        if s == "masters":
-            g = g[g.games >= 10]
-        if s == "lichess_titled":          # about 8 games per position: pooled marker only
-            g_points = g.iloc[:0]
-        else:
-            g_points = g
         label, colour, marker, filled = SOURCES[s]
-        x, y = means_xy(g_points)
-        ax.scatter(x, y, s=5 if s not in ("masters", "lichess_titled") else 9, marker=marker,
-                   facecolor=colour if filled else "none", edgecolor=colour, lw=0 if filled else 0.5,
-                   alpha=0.35 if filled else 0.6, zorder=2)
-        n = g[["white_wins", "draws", "black_wins"]].sum().to_numpy(float)
-        px, py = to_xy((n / n.sum())[None, :])
-        ax.scatter(px, py, s=60, marker=marker, facecolor=colour if filled else "white",
-                   edgecolor="#111111" if filled else colour, lw=1.0, zorder=4)
+        x, y = means_xy(g)
+        ax.scatter(x, y, s=4, marker=marker, facecolor=colour, edgecolor=colour, lw=0,
+                   alpha=0.35, zorder=2)
     triangle(ax)
     # The region shown in the panels below (strip_panel's default window).
     from matplotlib.patches import Rectangle
     ax.add_patch(Rectangle((0.3, 0.0), 0.45, H * 0.98, fill=False, edgecolor="#111111", lw=0.9,
                            ls=(0, (1, 2)), zorder=6))
-    # Key: source colours, then what the small and large markers mean.
-    from matplotlib.lines import Line2D
-    handles = [Line2D([], [], ls="none", marker=SOURCES[s][2], ms=6, mfc=SOURCES[s][1],
-                      mec="#111111", mew=0.8, label=SOURCES[s][0])
-               for s in SOURCES if not post[post.source == s].empty]
-    handles += [Line2D([], [], ls="none", label=""),
-                Line2D([], [], ls="none", marker="o", ms=2.5, mfc="#888888", mec="none",
-                       label="Each position"),
-                Line2D([], [], ls="none", marker="o", ms=7, mfc="#888888", mec="#111111", mew=0.8,
-                       label="Pooled")]
-    fig.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.03, 0.985), frameon=False,
-               handletextpad=0.3, labelspacing=0.45)
+    ax.set_title(SOURCES[human][0], fontsize=9, fontweight="bold", pad=14)
     ax.set_xlim(-0.14, 1.14)
     ax.set_ylim(-0.12, H + 0.09)
     ax.set_aspect("equal")
     ax.axis("off")
+
+
+def fig_ternary(post: pd.DataFrame, out_dir: Path) -> list[Path]:
+    plt = apply_style()
+    fig = plt.figure(figsize=(7.0, 6.6))
+    gs = fig.add_gridspec(2, 4, height_ratios=[0.62, 1.0], hspace=0.10, wspace=0.08)
+    for j, human in enumerate(HUMAN_SOURCES):
+        ternary_overview(fig.add_subplot(gs[0, 2 * j:2 * j + 2]), post, human)
     for j, pos in enumerate(TERNARY_POSITIONS):
         strip_panel(fig.add_subplot(gs[1, j]), post, pos, ZOOM_SOURCES, ylab=(j == 0))
     out_dir.mkdir(parents=True, exist_ok=True)
