@@ -86,7 +86,7 @@ def fig_levels() -> list[Path]:
                 if pd.isna(est):
                     continue
                 ax.errorbar(x, scale * est, yerr=[[scale * (est - lo)], [scale * (hi - est)]], fmt=st["marker"],
-                            color=st["color"], mfc=st["mfc"], ms=5, elinewidth=1.0, capsize=0, zorder=3)
+                            color=st["color"], mfc=st["mfc"], ms=3.2, elinewidth=1.0, capsize=0, zorder=3)
             ticks.append(x)
             tick_labels.append(GROUP_LABELS.get(grp, grp))
             x += 1
@@ -98,8 +98,8 @@ def fig_levels() -> list[Path]:
     for e in ("stockfish", "caissa"):
         r = g[g.dataset == f"{e}_selfplay"].iloc[0]
         es = ENGINES[e]
-        axes[0].plot(x, r.advantage_elo, es.marker, color=es.colour, ms=6, zorder=3)
-        axes[1].plot(x, 100 * r.decisive_adj, es.marker, color=es.colour, ms=6, zorder=3)
+        axes[0].plot(x, r.advantage_elo, es.marker, color=es.colour, ms=4.2, zorder=3)
+        axes[1].plot(x, 100 * r.decisive_adj, es.marker, color=es.colour, ms=4.2, zorder=3)
         ticks.append(x)
         tick_labels.append(es.label)
         x += 1
